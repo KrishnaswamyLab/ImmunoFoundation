@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     config = ProteinGraphConfig(**new_edge_funcs)
 
-    config.dict()
+    config.model_dump()
 
     # Graphein does not appear to encode the peptide sequence uniquely, redefine an encoding sequence
     enc_dict = {

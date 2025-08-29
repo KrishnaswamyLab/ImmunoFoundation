@@ -25,6 +25,13 @@ def pad_graph(graph, max_nodes, feature_size, coord_size):
         # Pad coordinates
         zero_coords = torch.zeros(num_nodes_to_add, coord_size)
         padded_coords = torch.cat([graph.coords, zero_coords], dim=0)
+        
+        # Pad internal coordinates if they exist
+        if hasattr(graph, 'internal_coords'):
+            internal_coord_size = graph.internal_coords.shape[1]
+            zero_internal_coords = torch.zeros(num_nodes_to_add, internal_coord_size)
+            padded_internal_coords = torch.cat([graph.internal_coords, zero_internal_coords], dim=0)
+            graph.internal_coords = padded_internal_coords
 
         # Update the graph
         graph.x = padded_features
@@ -64,6 +71,11 @@ def to_dgl(pt_geometric_graph):
     dgl_graph = dgl.graph((src, dst), num_nodes=pt_geometric_graph.num_nodes)
     dgl_graph.ndata['x'] = pt_geometric_graph.x  # Node features
     dgl_graph.edata['edge_attr'] = pt_geometric_graph.edge_attr  # Edge attributes
+    
+    # Keep internal coordinates if they exist
+    if hasattr(pt_geometric_graph, 'internal_coords'):
+        dgl_graph.ndata['internal_coords'] = pt_geometric_graph.internal_coords
+        
     return dgl_graph
 
 # Function to pad peptide sequences

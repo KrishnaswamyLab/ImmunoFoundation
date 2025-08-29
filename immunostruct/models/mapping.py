@@ -13,6 +13,7 @@ model_map = {
     "HybridModel_SSL": HybridModel_SSL,
     "HybridModelv2": HybridModelv2,
     "HybridModelv2_SSL": HybridModelv2_SSL,
+    "HybridModelv3": HybridModelv3,
     "HybridModel_Comparative": HybridModel_Comparative,
     "HybridModel_Comparative_SSL": HybridModel_Comparative_SSL,
     "HybridModelv2_Comparative": HybridModelv2_Comparative,

@@ -178,6 +178,11 @@ def preprocess_sequence_graph(name_mapper, new_graphs, new_imm_dict, f_dict):
         graph = graph_mapper[y[1]]
 
         graph.y = torch.tensor([immuno_score, f_score], dtype=torch.float)  # We use a one-element tensor for each graph-level label
+        
+        src, dst = graph.edge_index
+        edge_index_pyg = torch.stack([src, dst], dim=0)
+        graph.internal_coords = cartesian_to_internal_coordinates(graph.coords, edge_index_pyg)
+        
         graph.x = torch.cat([graph.x, graph.coords], dim=-1)
 
         graph.x = graph.x.to(dtype=torch.float32)
@@ -285,6 +290,11 @@ def preprocess_sequence_graph_cancer_wt(combined_df, name_mapper_cancer, name_ma
         graph_cancer.y = torch.tensor([immuno_score, foreignness_score], dtype=torch.float)  # We use a one-element tensor for each graph-level label
         graph_cancer.x = graph_cancer.x.to(dtype=torch.float32)
         graph_cancer.y = graph_cancer.y.to(dtype=torch.float32)
+        
+        # Generate internal coordinates
+        src, dst = graph_cancer.edge_index
+        edge_index_pyg = torch.stack([src, dst], dim=0)
+        graph_cancer.internal_coords = cartesian_to_internal_coordinates(graph_cancer.coords, edge_index_pyg)
 
         graph_wt = graph_mapper_wt[v_wt[1]]
         if graph_wt.x.shape[1] < graph_cancer.x.shape[1]:
@@ -292,6 +302,12 @@ def preprocess_sequence_graph_cancer_wt(combined_df, name_mapper_cancer, name_ma
             graph_wt.y = torch.tensor([0, combined_df['smoothed_foreign'].min()], dtype=torch.float)  # We use a one-element tensor for each graph-level label
             graph_wt.x = graph_wt.x.to(dtype=torch.float32)
             graph_wt.y = graph_wt.y.to(dtype=torch.float32)
+            
+            # Generate internal coordinates
+            src, dst = graph_wt.edge_index
+            edge_index_pyg = torch.stack([src, dst], dim=0)
+            graph_wt.internal_coords = cartesian_to_internal_coordinates(graph_wt.coords, edge_index_pyg)
+            
             assert graph_wt.x.shape[1] == graph_cancer.x.shape[1]
         else:
             # In this case, the same graph has already been iterated. Move on.
@@ -336,6 +352,11 @@ def preprocess_sequence_graph_clinical(graph_directory, seq_path):
         graph = graph_mapper[y[1]]
         graph.x = torch.cat([graph.x, graph.coords], dim=-1)
         graph.x = graph.x.to(dtype=torch.float32)
+        
+        # Generate internal coordinates for consistency with other datasets
+        src, dst = graph.edge_index
+        edge_index_pyg = torch.stack([src, dst], dim=0)
+        graph.internal_coords = cartesian_to_internal_coordinates(graph.coords, edge_index_pyg)
 
     return name_mapper, graph_mapper
 
@@ -438,3 +459,93 @@ def preprocess_hla_old(table, graphs, fp2_dict, f_dict, new_imm_dict):
         data.y = data.y.to(dtype=torch.float32)
 
     return new_graphs, corresponding_alleles, new_values_fp2_values, new_values_f_values, peptide_order
+
+def cartesian_to_internal_coordinates(coord_feat, edge_index):
+        # Convert to numpy
+        coords_np = coord_feat.detach().cpu().numpy()
+        edge_index_np = edge_index.detach().cpu().numpy()
+        
+        num_nodes = coords_np.shape[0]
+        internal_features = []
+        
+        # adjacency list for neighbor lookup
+        adjacency = {}
+        for i in range(num_nodes):
+            adjacency[i] = []
+        for src, dst in edge_index_np.T:
+            adjacency[src].append(dst)
+            adjacency[dst].append(src)
+        
+        for node_i in range(num_nodes):
+            node_features = []
+            neighbors = adjacency[node_i]
+            
+            if len(neighbors) == 0:
+                # isolated node - use zero features
+                node_features = [0.0] * 6  # 6 internal coordinate features
+            else:
+                # bond lengths to all neighbors
+                distances = [];
+                for neighbor in neighbors[:3]:
+                    dist = np.linalg.norm(coords_np[node_i] - coords_np[neighbor])
+                    distances.append(dist)
+                    
+                # pad to 3 distances
+                while len(distances) < 3:
+                    distances.append(0.0)
+                node_features.extend(distances[:3])
+                
+                # bond angles (if at least 2 neighbors)
+                if len(neighbors) >= 2:
+                    for i in range(min(2, len(neighbors)-1)):
+                        v1 = coords_np[neighbors[i]] - coords_np[node_i]
+                        v2 = coords_np[neighbors[i+1]] - coords_np[node_i]
+                        norm1, norm2 = np.linalg.norm(v1), np.linalg.norm(v2)
+                        if norm1 > 1e-8 and norm2 > 1e-8:  # Check for zero vectors
+                            cos_angle = np.dot(v1, v2) / (norm1 * norm2)
+                            angle = np.arccos(np.clip(cos_angle, -1, 1))
+                            node_features.append(angle)
+                        else:
+                            node_features.append(0.0)
+                else:
+                    node_features.append(0.0)
+                
+                # dihedral angles (if at least 3 neighbors forming a chain)
+                if len(neighbors) >= 3:
+                    try:
+                        v1 = coords_np[neighbors[0]] - coords_np[node_i]
+                        v2 = coords_np[neighbors[1]] - coords_np[neighbors[0]]
+                        v3 = coords_np[neighbors[2]] - coords_np[neighbors[1]]
+                        
+                        # Check for zero vectors
+                        if (np.linalg.norm(v1) > 1e-8 and 
+                            np.linalg.norm(v2) > 1e-8 and 
+                            np.linalg.norm(v3) > 1e-8):
+                            
+                            n1 = np.cross(v1, v2)
+                            n2 = np.cross(v2, v3)
+                            
+                            # Check for zero normals (collinear vectors)
+                            if np.linalg.norm(n1) > 1e-8 and np.linalg.norm(n2) > 1e-8:
+                                v2_norm = v2 / np.linalg.norm(v2)
+                                dihedral = np.arctan2(
+                                    np.dot(np.cross(n1, n2), v2_norm), 
+                                    np.dot(n1, n2)
+                                )
+                                node_features.append(dihedral)
+                            else:
+                                node_features.append(0.0)
+                        else:
+                            node_features.append(0.0)
+                    except:
+                        node_features.append(0.0)
+                else:
+                    node_features.append(0.0)
+                
+                # Pad to 6 features
+                while len(node_features) < 6:
+                    node_features.append(0.0)
+            
+            internal_features.append(node_features[:6])
+            
+        return torch.tensor(internal_features, dtype=torch.float32, device=coord_feat.device)

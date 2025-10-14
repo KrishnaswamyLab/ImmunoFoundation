@@ -17,6 +17,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 
 # IMPORT PROJECT MODULES
 from immunofoundation.models.ImmunoFoundationModule import ImmunoFoundationModule
+from immunofoundation.data.ImmunoDataModule import ImmunoDataModule
+
 import immunofoundation.utils as eu 
 
 
@@ -29,7 +31,7 @@ class Experiment:
         self._data_cfg = cfg.data
         self._exp_cfg = cfg.experiment
         self._model = ImmunoFoundationModule(self._cfg.model)
-        self._datamodule = None
+        self._datamodule = ImmunoDataModule(self._cfg.data)
  
     def train(self):
         callbacks = []
@@ -75,10 +77,10 @@ class Experiment:
             devices=devices,
         )
 
-        # trainer.fit(
-        #     model=self._model,
-        #     datamodule=self._datamodule,
-        # )
+        trainer.fit(
+            model=self._model,
+            datamodule=self._datamodule,
+        )
 
 @hydra.main(version_base=None, config_path="./configs", config_name="train")
 def main(cfg: DictConfig):

@@ -5,30 +5,29 @@ import random
 import torch
 import argparse
 import numpy as np
-from .preprocess import preprocess_graphs, preprocess_graph, preprocess_sequence, preprocess_sequence_graph, preprocess_properties, preprocess_hla
-from .preprocess import preprocess_properties_cancer_wt, preprocess_sequence_graph_cancer_wt
+from immunofoundation.data.components.preprocess import preprocess_graphs, preprocess_graph, preprocess_sequence, preprocess_sequence_graph, preprocess_properties, preprocess_hla
 from .utils import duplicate_check, RandomRotation, one_hot_encode_sequence
 from collections import Counter
 
-class ImmunoPredDataset(Dataset):
-    def __init__(self, config, graph_directory, property_path, hla_path):
+class ImmunoDataset(Dataset):
+    def __init__(self, data_cfg, is_training):
+        #TODO implement the is_training flag logic
+        self.config = data_cfg
+        self.graph_directory = data_cfg.graphs_path
+        # self.property_path = property_path
+        # self.hla_path = hla_path
 
-        self.config = config
-        self.graph_directory = graph_directory
-        self.property_path = property_path
-        self.hla_path = hla_path
+        # self.sequence_pad_count = config.sequence_pad_count
+        # self.structure_pad_count = config.structure_pad_count
 
-        self.sequence_pad_count = config.sequence_pad_count
-        self.structure_pad_count = config.structure_pad_count
+        graphs = preprocess_graphs(self.graph_directory)
+        # f_dict, fp2_dict, new_imm_dict, expanded_pep_pair = preprocess_properties(property_path, True if "Cancer" in graph_directory else False)
+        # name_mapper = preprocess_hla(expanded_pep_pair, hla_path)
+        # name_mapper, graph_mapper = preprocess_sequence_graph(name_mapper, graphs, new_imm_dict, f_dict)
+        # graph_mapper = preprocess_graph(graph_mapper, config.feature_size, config.coord_size)
+        # encoded_full_sequence_map, encoded_peptide_map = preprocess_sequence(name_mapper, AMINO_ACIDS, PADDING_CHAR)
 
-        graphs = preprocess_graphs(graph_directory)
-        f_dict, fp2_dict, new_imm_dict, expanded_pep_pair = preprocess_properties(property_path, True if "Cancer" in graph_directory else False)
-        name_mapper = preprocess_hla(expanded_pep_pair, hla_path)
-        name_mapper, graph_mapper = preprocess_sequence_graph(name_mapper, graphs, new_imm_dict, f_dict)
-        graph_mapper = preprocess_graph(graph_mapper, config.feature_size, config.coord_size)
-        encoded_full_sequence_map, encoded_peptide_map = preprocess_sequence(name_mapper, AMINO_ACIDS, PADDING_CHAR)
-
-        self.organize(name_mapper, encoded_full_sequence_map, encoded_peptide_map, fp2_dict, new_imm_dict, f_dict, graph_mapper)
+        # self.organize(name_mapper, encoded_full_sequence_map, encoded_peptide_map, fp2_dict, new_imm_dict, f_dict, graph_mapper)
         self.normalize()
 
     def organize(self, name_mapper, encoded_full_sequence_map, encoded_peptide_map, fp2_dict, new_imm_dict, f_dict, graph_mapper):

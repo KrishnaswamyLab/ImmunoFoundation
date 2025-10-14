@@ -1,6 +1,11 @@
 
 
 data:
+  batch_size: 28
+  max_batch_size: 28
+  num_workers: 4
+  prefetch_factor: 100
+  graphs_path: /home/jcr222/workspace/ImmunoStruct/pyg_data/PyGs
 
 model:
   sequence:

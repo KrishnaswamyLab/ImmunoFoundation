@@ -112,50 +112,17 @@ Before installation, ensure you have:
 1. **Clone the repository**
    ```sh
    git clone https://github.com/KrishnaswamyLab/ImmunoStruct.git
-   cd ImmunoStruct
+   cd ImmunoFoundation
    ```
 
-2. **Create and activate conda environment**
+2. **Create and activate uv environment**
    ```sh
-   conda create --name immuno python=3.10 -c anaconda -c conda-forge
-   conda activate immuno
+   uv venv
+   source .venv/bin/activate
+   uv venv -p 3.12.4
+   uv pip install -r requirements.txt
+   uv sync
    ```
-
-3. **Install core dependencies**
-   ```sh
-   conda install cudatoolkit=11.2 wandb pydantic -c conda-forge
-   conda install scikit-image pillow matplotlib seaborn tqdm -c anaconda
-   ```
-
-4. **Install PyTorch**
-   ```sh
-   python -m pip install torch==2.1.2 torchvision==0.16.2 torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu118
-   ```
-
-5. **Install DGL**
-   ```sh
-   python -m pip install dgl -f https://data.dgl.ai/wheels/torch-2.1/cu118/repo.html
-   python -m pip install torchdata==0.7.1
-   ```
-
-6. **Install PyTorch Geometric and related packages**
-   ```sh
-   python -m pip install torch-scatter==2.1.2+pt21cu118 torch-sparse==0.6.18+pt21cu118 torch-cluster==1.6.3+pt21cu118 torch-spline-conv==1.2.2+pt21cu118 torch_geometric==2.5.3 numpy==1.26.3 -f https://data.pyg.org/whl/torch-2.1.2+cu118.html
-   ```
-
-7. **Install additional packages**
-   ```sh
-   python -m pip install graphein[extras]
-   python -m pip install lifelines
-   python -m pip install -U phate
-   python -m pip install multiscale-phate
-   ```
-
-8. **Set up environment variables (if needed)**
-   ```sh
-   export LD_LIBRARY_PATH=/path/to/conda/envs/immuno/lib:$LD_LIBRARY_PATH
-   ```
-
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 <!-- USAGE EXAMPLES -->

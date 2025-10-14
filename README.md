@@ -174,7 +174,12 @@ python immunostruct/preprocessing/cancer_graph_construction_new_KBG.py
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
+## Implementing
 
+If you want to create a new model:
+  1- Copy the train.py function.
+  2- Create a new config file.
+  3- Change the config call in the new training function.
 <!-- TROUBLESHOOTING -->
 ## Troubleshooting
 

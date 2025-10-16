@@ -6,6 +6,7 @@ from pytorch_lightning import LightningDataModule
 
 from immunofoundation.data.components.ImmunoDataset import ImmunoDataset
 
+
 class ImmunoDataModule(LightningDataModule):
     def __init__(self,data_cfg):
         super().__init__()

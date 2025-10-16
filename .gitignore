@@ -1,5 +1,111 @@
-*.pyc
-*.ipynb_checkpoints/
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.conda/
+
+# PyTorch Lightning
+lightning_logs/
+tb_logs/
+wandb/
+mlruns/
+outputs/
+multirun/
+
+# Checkpoints and model files
+*.ckpt
+*.pth
 *.pt
-*/wandb/*
-*/figures/*
+*.bin
+*.h5
+checkpoints/
+saved_models/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+*.ipynb
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Data files (uncomment if you don't want to track data)
+# data/
+# datasets/
+# *.csv
+# *.json
+# *.pkl
+# *.pickle
+# *.hdf5
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.db
+
+# Environment variables
+.env
+.env.local
+
+# Testing
+.coverage
+.pytest_cache/
+.tox/
+htmlcov/
+
+# Hydra (if using with Lightning)
+.hydra/
+hydra/
+
+# TensorBoard
+events.out.tfevents.*
+
+# Weights & Biases
+wandb/
+
+# Distribution / packaging
+*.tar.gz
+*.zip
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Misc
+.cache/
+tmp/
+temp/
+
+#Data
+data/*

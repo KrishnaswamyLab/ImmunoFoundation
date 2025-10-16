@@ -1,20 +1,44 @@
-from cpdb import PDB
+from Bio.PDB import PDBParser
+from Bio.SeqUtils import seq1
 
-def extract_protein_data(pdb_file):
-    pdb = PDB(pdb_file)
-    chain = pdb.chains[0]
+def extract_ca_and_sequence(pdb_file):
+    parser = PDBParser(QUIET=True)
+    structure = parser.get_structure('protein', pdb_file)
+    model = structure[0]
     
-    ca_coords = []
-    sequence = ""
+    ca_coords_peptide = []
+    sequence_peptide = []
     
-    for residue in chain.residues:
-        ca_atom = residue.get_atom('CA') # NOTE: for all-atom, this might need to change
-        
-        if ca_atom is not None:
-            # Extract coordinates
-            ca_coords.append((ca_atom.x, ca_atom.y, ca_atom.z))
-            
-            # Get amino acid single-letter code
-            sequence += residue.code
+    if 'A' in model:
+        for residue in model['A']:
+            if 'CA' in residue:
+                ca_atom = residue['CA']
+                ca_coords_peptide.append(tuple(ca_atom.get_coord()))
+                
+                try:
+                    aa = seq1(residue.get_resname())
+                    sequence_peptide.append(aa)
+                except KeyError:
+                    # Handle non-standard residues
+                    sequence_peptide.append('X')
     
-    return ca_coords, sequence
+    ca_coords_mhc = []
+    sequence_mhc = []
+    
+    if 'B' in model:
+        for residue in model['B']:
+            if 'CA' in residue:
+                ca_atom = residue['CA']
+                ca_coords_mhc.append(tuple(ca_atom.get_coord()))
+                
+                try:
+                    aa = seq1(residue.get_resname())
+                    sequence_mhc.append(aa)
+                except KeyError:
+                    # Handle non-standard residues
+                    sequence_mhc.append('X')
+    
+    sequence_peptide = ''.join(sequence_peptide)
+    sequence_mhc = ''.join(sequence_mhc)
+    
+    return ca_coords_peptide, sequence_peptide, ca_coords_mhc, sequence_mhc

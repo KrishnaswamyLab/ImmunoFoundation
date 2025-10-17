@@ -4,8 +4,7 @@ from typing import Any, Dict, Optional
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
 
-from immunofoundation.data.components.ImmunoDataset import ImmunoDataset
-
+from immunofoundation.data.components.ImmunoDataset import ImmunoDataset, custom_collate
 
 class ImmunoDataModule(LightningDataModule):
     def __init__(self,data_cfg):
@@ -35,6 +34,7 @@ class ImmunoDataModule(LightningDataModule):
             prefetch_factor=None if num_workers == 0 else self.data_cfg.prefetch_factor,
             pin_memory=False,
             persistent_workers=True if num_workers > 0 else False,
+            collate_fn=custom_collate
         )
     
     def val_dataloader(self):
@@ -42,7 +42,8 @@ class ImmunoDataModule(LightningDataModule):
             self.data_val,
             num_workers=2,
             prefetch_factor=2,
-            persistent_workers=True
+            persistent_workers=True,
+            collate_fn=custom_collate
         )
 
     def prepare_data(self):

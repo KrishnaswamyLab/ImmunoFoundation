@@ -18,6 +18,7 @@ class HybridModel(nn.Module):
                  vae_latent_dim: int = 32,
                  gat_hidden_channels: int = 64,
                  property_embedding_dim : int = 8,
+                 use_esm: bool = True,
                  *args, **kwargs):
         super().__init__()
 
@@ -27,6 +28,7 @@ class HybridModel(nn.Module):
         self.vae_input_dim = vae_input_dim
         self.gat_hidden_channels = gat_hidden_channels
         self.property_embedding_dim = property_embedding_dim
+        self.use_esm = use_esm
 
         self.GCN_layers = nn.ModuleList([EGNNConv(20, gat_hidden_channels, gat_hidden_channels, 1)])
         for _ in range(gcn_layers):
@@ -52,6 +54,9 @@ class HybridModel(nn.Module):
             nn.Linear(32, self.property_embedding_dim),
             nn.ReLU(True)
         )
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -63,15 +68,24 @@ class HybridModel(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -130,6 +144,7 @@ class HybridModel_SSL(nn.Module):
                  gat_hidden_channels: int = 64,
                  property_embedding_dim : int = 8,
                  mlp_features = 32,
+                 use_esm: bool = True,
                  *args, **kwargs):
         super().__init__()
 
@@ -140,6 +155,7 @@ class HybridModel_SSL(nn.Module):
         self.gat_hidden_channels = gat_hidden_channels
         self.property_embedding_dim = property_embedding_dim
         self.mlp_features = mlp_features
+        self.use_esm = use_esm
 
         self.GCN_layers = nn.ModuleList([EGNNConv(20, gat_hidden_channels, gat_hidden_channels, 1)])
         for _ in range(gcn_layers):
@@ -168,6 +184,9 @@ class HybridModel_SSL(nn.Module):
             nn.Linear(32, self.property_embedding_dim),
             nn.ReLU(True)
         )
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -178,15 +197,24 @@ class HybridModel_SSL(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -250,6 +278,7 @@ class HybridModelv2(nn.Module):
                  self_attention_heads: int = 1,
                  property_embedding_dim: int = 8,
                  combined_attention_heads: int = 8,
+                 use_esm: bool = True,
                  *args, **kwargs):
         super().__init__()
 
@@ -286,6 +315,10 @@ class HybridModelv2(nn.Module):
             nn.Linear(32, self.property_embedding_dim),
             nn.ReLU(True)
         )
+        self.use_esm = use_esm
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -297,15 +330,24 @@ class HybridModelv2(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -372,6 +414,7 @@ class HybridModelv2_SSL(nn.Module):
                  self_attention_heads: int = 1,
                  combined_attention_heads: int = 8,
                  mlp_features: int = 32,
+                 use_esm: bool = True,
                  *args, **kwargs):
         super().__init__()
 
@@ -382,6 +425,10 @@ class HybridModelv2_SSL(nn.Module):
         self.gat_hidden_channels = gat_hidden_channels
         self.property_embedding_dim = property_embedding_dim
         self.mlp_features = mlp_features
+        self.use_esm = use_esm
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
         self.GCN_layers = nn.ModuleList([EGNNConv(20, gat_hidden_channels, gat_hidden_channels, 1)])
         for _ in range(gcn_layers):
@@ -423,15 +470,24 @@ class HybridModelv2_SSL(nn.Module):
 
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -500,6 +556,7 @@ class HybridModelv3(nn.Module):
                  self_attention_heads: int = 1,
                  property_embedding_dim: int = 8,
                  combined_attention_heads: int = 8,
+                 use_esm: bool = True,
                  *args, **kwargs):
         super().__init__()
 
@@ -545,6 +602,10 @@ class HybridModelv3(nn.Module):
             nn.Linear(32, self.property_embedding_dim),
             nn.ReLU(True)
         )
+        self.use_esm = use_esm
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -556,15 +617,24 @@ class HybridModelv3(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 

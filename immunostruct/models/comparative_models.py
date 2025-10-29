@@ -17,7 +17,8 @@ class HybridModel_Comparative(nn.Module):
                  vae_latent_dim: int = 32,
                  gat_hidden_channels: int = 64,
                  property_embedding_dim : int = 8,
-                 use_wt_for_downstream: bool = True):
+                 use_wt_for_downstream: bool = True,
+                 use_esm: bool = True):
         super().__init__()
 
         self.device = device
@@ -27,6 +28,7 @@ class HybridModel_Comparative(nn.Module):
         self.gat_hidden_channels = gat_hidden_channels
         self.property_embedding_dim = property_embedding_dim
         self.use_wt_for_downstream = use_wt_for_downstream
+        self.use_esm = use_esm
 
         self.GCN_layers = nn.ModuleList([EGNNConv(20, gat_hidden_channels, gat_hidden_channels, 1)])
         for _ in range(gcn_layers):
@@ -52,6 +54,9 @@ class HybridModel_Comparative(nn.Module):
             nn.Linear(32, self.property_embedding_dim),
             nn.ReLU(True)
         )
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         if self.use_wt_for_downstream:
@@ -67,15 +72,24 @@ class HybridModel_Comparative(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -182,6 +196,7 @@ class HybridModel_Comparative_SSL(nn.Module):
                  gat_hidden_channels: int = 64,
                  property_embedding_dim : int = 8,
                  use_wt_for_downstream: bool = True,
+                 use_esm: bool = True,
                  mlp_features: int = 32):
         super().__init__()
 
@@ -192,6 +207,7 @@ class HybridModel_Comparative_SSL(nn.Module):
         self.gat_hidden_channels = gat_hidden_channels
         self.property_embedding_dim = property_embedding_dim
         self.use_wt_for_downstream = use_wt_for_downstream
+        self.use_esm = use_esm
         self.mlp_features = mlp_features
 
         self.GCN_layers = nn.ModuleList([EGNNConv(20, gat_hidden_channels, gat_hidden_channels, 1)])
@@ -219,6 +235,10 @@ class HybridModel_Comparative_SSL(nn.Module):
             nn.ReLU(True)
         )
 
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
+
         self.classifier_head = nn.Linear(self.mlp_features, 1)
         self.node_predictor_head = nn.Linear(self.mlp_features, 20) # number of amino acids
 
@@ -235,15 +255,24 @@ class HybridModel_Comparative_SSL(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 

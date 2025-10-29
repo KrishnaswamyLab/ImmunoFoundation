@@ -8,15 +8,16 @@ from .layers import SelfAttention, MultiHeadAttention
 __all__ = ["SequenceModel", "SequenceFpModel", "StructureModel", "StructureModel_SSL", "StructureModelv2", "DualModel"]
 
 class SequenceModel(nn.Module):
-    def __init__(self, vae_input_dim, device, gcn_layers=5, vae_hidden_dim=512, vae_latent_dim=32, gat_hidden_channels = 64, *args, **kwargs):
+    def __init__(self, vae_input_dim, device, gcn_layers=5, vae_hidden_dim=512, vae_latent_dim=32, gat_hidden_channels = 64, use_esm: bool = True, *args, **kwargs):
         super(SequenceModel, self).__init__()
 
         self.device = device
         self.vae_hidden_dim = vae_hidden_dim
         self.vae_latent_dim = vae_latent_dim
         self.vae_input_dim = vae_input_dim
+        self.use_esm = use_esm
 
-        # VAE components
+        # VAE components (kept for backward compatibility / optional fallback)
         self.vae_fc1 = nn.Linear(vae_input_dim, vae_hidden_dim)
         self.vae_fc21 = nn.Linear(vae_hidden_dim, vae_latent_dim)  # Mean
         self.vae_fc22 = nn.Linear(vae_hidden_dim, vae_latent_dim)  # Log variance
@@ -25,6 +26,11 @@ class SequenceModel(nn.Module):
 
         # Fusion/ Classifier layers
         self.classifier = self.get_classifier()
+
+        if self.use_esm:
+            # lazy import to avoid forcing ESM dependency at module import time
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -36,15 +42,26 @@ class SequenceModel(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            # Accept flattened or (B, L, C) one-hot
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            # dummy reconstruction to preserve API
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -66,15 +83,16 @@ class SequenceModel(nn.Module):
         return recon_x, mu, logvar, final_output
 
 class SequenceFpModel(nn.Module):
-    def __init__(self, vae_input_dim, device, gcn_layers=5, vae_hidden_dim=512, vae_latent_dim=32, gat_hidden_channels = 64, *args, **kwargs):
+    def __init__(self, vae_input_dim, device, gcn_layers=5, vae_hidden_dim=512, vae_latent_dim=32, gat_hidden_channels = 64, use_esm: bool = True, *args, **kwargs):
         super(SequenceFpModel, self).__init__()
 
         self.device = device
         self.vae_hidden_dim = vae_hidden_dim
         self.vae_latent_dim = vae_latent_dim
         self.vae_input_dim = vae_input_dim
+        self.use_esm = use_esm
 
-        # VAE components
+        # VAE components (fallback)
         self.vae_fc1 = nn.Linear(vae_input_dim, vae_hidden_dim)
         self.vae_fc21 = nn.Linear(vae_hidden_dim, vae_latent_dim)  # Mean
         self.vae_fc22 = nn.Linear(vae_hidden_dim, vae_latent_dim)  # Log variance
@@ -83,6 +101,10 @@ class SequenceFpModel(nn.Module):
 
         # Fusion/ Classifier layers
         self.classifier = self.get_classifier()
+
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -94,15 +116,24 @@ class SequenceFpModel(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 
@@ -307,7 +338,7 @@ class StructureModelv2(nn.Module):
         return 0, 0, 0, final_output, node_prediction
 
 class DualModel(nn.Module):
-    def __init__(self, vae_input_dim, device, gcn_layers=5, vae_hidden_dim=512, vae_latent_dim=32, gat_hidden_channels = 64):
+    def __init__(self, vae_input_dim, device, gcn_layers=5, vae_hidden_dim=512, vae_latent_dim=32, gat_hidden_channels = 64, use_esm: bool = True):
         super(DualModel, self).__init__()
 
         self.device = device
@@ -315,6 +346,7 @@ class DualModel(nn.Module):
         self.vae_latent_dim = vae_latent_dim
         self.vae_input_dim = vae_input_dim
         self.gat_hidden_channels = gat_hidden_channels
+        self.use_esm = use_esm
 
         self.GCN_layers = nn.ModuleList([EGNNConv(20, gat_hidden_channels, gat_hidden_channels, 1)])
         for _ in range(gcn_layers):
@@ -323,7 +355,7 @@ class DualModel(nn.Module):
         # GAT components
         self.self_attention = SelfAttention(gat_hidden_channels)
 
-        # VAE components
+        # VAE components (fallback)
         self.vae_fc1 = nn.Linear(vae_input_dim, vae_hidden_dim)
         self.vae_fc21 = nn.Linear(vae_hidden_dim, vae_latent_dim)  # Mean
         self.vae_fc22 = nn.Linear(vae_hidden_dim, vae_latent_dim)  # Log variance
@@ -332,6 +364,10 @@ class DualModel(nn.Module):
 
         # Fusion/ Classifier layers
         self.classifier = self.get_classifier()
+
+        if self.use_esm:
+            from .sequence_encoders import ESMEncoder
+            self.sequence_encoder = ESMEncoder(self.vae_latent_dim, device)
 
     def get_classifier(self):
         return nn.Sequential(
@@ -343,15 +379,24 @@ class DualModel(nn.Module):
         )
 
     def encode_vae(self, x):
+        if getattr(self, 'use_esm', False):
+            mu = self.sequence_encoder(x)
+            logvar = torch.zeros_like(mu)
+            return mu, logvar
         h1 = F.relu(self.vae_fc1(x))
         return self.vae_fc21(h1), self.vae_fc22(h1)
 
     def reparameterize(self, mu, logvar):
+        if getattr(self, 'use_esm', False):
+            return mu
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode_vae(self, z):
+        if getattr(self, 'use_esm', False):
+            batch = z.size(0)
+            return torch.zeros(batch, self.vae_input_dim, device=z.device)
         h3 = F.relu(self.vae_fc3(z))
         return self.vae_fc4(h3)  # Sigmoid for reconstruction
 

@@ -12,6 +12,17 @@ model:
     in_dim: 32
     out_dim: 32
 
+sequence:
+  use_esm: True
+  model_name: esm2_t6_8M_UR50D   # small default -- adjust as needed
+  out_dim: 256                   # embedding dimension returned by SequenceModel
+  freeze_esm: True               # True -> don't fine-tune ESM weights
+  vocab: 'ACDEFGHIKLMNPQRSTVWYJ' # optional; last char is padding char
+  
+optimizer:
+  lr: 1e-4
+  weight_decay: 1e-6
+
 experiment:
   debug: False
   num_devices: 1

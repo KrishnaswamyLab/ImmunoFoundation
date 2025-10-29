@@ -17,6 +17,7 @@ class ImmunoFoundationModule(LightningModule):
 
     def __init__(self,model_cfg):
         super().__init__()
+        self.model_cfg = model_cfg
         self.sequence_model = SequenceModel(model_cfg.sequence)
 
         print(model_cfg.sequence)
@@ -37,7 +38,14 @@ class ImmunoFoundationModule(LightningModule):
         return loss
     
     def configure_optimizers(self):
-        return torch.optim.AdamW(
-            params=self.model.parameters(),
-            **self._exp_cfg.optimizer
-        )
+        # Use optimizer config if provided in model_cfg, otherwise default
+        opt_cfg = getattr(self.model_cfg, 'optimizer', None)
+        if opt_cfg is None:
+            return torch.optim.AdamW(self.parameters(), lr=1e-4)
+        # expect opt_cfg to be a namespace/dict compatible with torch.optim.AdamW args
+        kwargs = {}
+        if hasattr(opt_cfg, 'lr'):
+            kwargs['lr'] = opt_cfg.lr
+        if hasattr(opt_cfg, 'weight_decay'):
+            kwargs['weight_decay'] = opt_cfg.weight_decay
+        return torch.optim.AdamW(self.parameters(), **kwargs)

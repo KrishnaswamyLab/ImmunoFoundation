@@ -14,6 +14,7 @@ from procedures import train_model, train_model_SSL, inference_comparative, trai
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Entry point.")
     parser.add_argument("--model", default="HybridModelv2_Comparative", type=str)
+    parser.add_argument("--use-esm", action='store_true', help="Enable ESM sequence encoder in models that support it")
     parser.add_argument("--use-wt-for-downstream", action='store_true')
     parser.add_argument("--learning-rate-pretrain", default=1e-3, type=float)
     parser.add_argument("--learning-rate-finetune", default=1e-4, type=float)
@@ -70,7 +71,7 @@ if __name__ == "__main__":
     # Define model.
     # input_dim = sequence length (11 for peptide, 283 for sequence) * embedding
     input_dim = 283 * 21 if config.full_sequence else 11 * 21
-    model = model_map[config.model](vae_input_dim=input_dim, device=device, use_wt_for_downstream=config.use_wt_for_downstream)
+    model = model_map[config.model](vae_input_dim=input_dim, device=device, use_wt_for_downstream=config.use_wt_for_downstream, use_esm=getattr(config, 'use_esm', False))
     model.to(device)
 
     # Pretraining and Finetuning datasets.

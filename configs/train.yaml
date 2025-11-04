@@ -5,7 +5,7 @@ data:
   max_batch_size: 28
   num_workers: 4
   prefetch_factor: 100
-  graphs_path: /home/jcr222/workspace/ImmunoStruct/pyg_data/PyGs
+  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata.csv
 
 model:
   sequence:

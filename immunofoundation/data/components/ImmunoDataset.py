@@ -1,5 +1,6 @@
 import pandas as pd
 import torch
+import numpy as np
 from torch.utils.data import Dataset
 
 from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence
@@ -10,21 +11,22 @@ from immunofoundation.data.components.preprocess import extract_biochemical_prop
 class ImmunoDataset(Dataset):
     def __init__(self, data_cfg, is_training):
         self.data_cfg = data_cfg
+        self.is_training = is_training
         self._init_metadata()
 
     def _init_metadata(self):
         pdb_csv = pd.read_csv(self.data_cfg.csv_path)
-        self.raw_csv = pdv_csv
+        self.raw_csv = pdb_csv
 
         if self.is_training:
             # get first 80% of samples for training
-            num_records_80 = int(df.shape[1]*0.8)-1
+            num_records_80 = int(pdb_csv.shape[1]*0.8)-1
             pdb_csv = pdb_csv.iloc[:num_records_80, :]
             self.csv = pdb_csv
-            print ("Training: {len(self.csv)} samples")
+            print (f"Training: {len(self.csv)} samples")
         else:
             # get remaining 20%% of samples for val/test
-            num_records_80 = int(df.shape[1]*0.8)-1
+            num_records_80 = int(pdb_csv.shape[1]*0.8)-1
             pdb_csv = pdb_csv.iloc[num_records_80:, :]
             self.csv = pdb_csv
             print (f"Validation: {len(self.csv)} samples")
@@ -39,11 +41,11 @@ class ImmunoDataset(Dataset):
         final_features = {}
         final_features['peptide_len'] = len(sequence_peptide)
         final_features['mhc_len'] = len(sequence_mhc)
-        final_features['peptide_coords'] = ca_coords_peptide
-        final_features['mhc_coords'] = ca_coords_mhc
+        final_features['peptide_coords'] = torch.tensor(ca_coords_peptide).float()
+        final_features['mhc_coords'] = torch.tensor(ca_coords_mhc).float()
         final_features['peptide_sequence'] = sequence_peptide
         final_features['mhc_sequence'] = sequence_mhc
-        final_features['biochemical_properties'] = biochemical_properties
+        final_features['biochemical_properties'] = torch.from_numpy(biochemical_properties)
 
         return final_features
 
@@ -87,13 +89,18 @@ def custom_collate(batch_list):
     - peptide coords [N_pep_res, 3]
     - MHC coords [N_mhc_res, 3]
     """
-    max_len_peptide = max(list(map(lambda len(x['peptide_len']) : x, batch_list)))
+    max_len_peptide = max([x['peptide_len'] for x in batch_list])
+    # max_len_peptide = max(list(map(lambda len(x['peptide_len']) : x, batch_list)))
     padded_peptide_ca_coords = torch.utils.data.default_collate([pad(rec['peptide_coords'], max_len=max_len_peptide) for rec in batch_list])
     mhc_ca_coords = torch.utils.data.default_collate([rec['mhc_coords'] for rec in batch_list])
-
+    biochemical_properties = torch.utils.data.default_collate([torch.tensor(rec['biochemical_properties']).float() for rec in batch_list])
+    mhc_sequences = torch.utils.data.default_collate([rec['mhc_sequence'] for rec in batch_list])
+    peptide_sequences = torch.utils.data.default_collate([rec['peptide_sequence'] for rec in batch_list])
     # TODO: include integer amino acid indices
     return {
         "mhc_coords": mhc_ca_coords,
-        "peptide_coords": padded_peptide_ca_coords
+        "peptide_coords": padded_peptide_ca_coords,
+        "biochemical_properties": biochemical_properties,
+        "mhc_sequence": mhc_sequences,
+        "peptide_sequence": peptide_sequences
     }
-    

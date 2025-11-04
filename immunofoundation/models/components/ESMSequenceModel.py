@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from typing import List
+import esm
 
 AMINO_ACIDS = 'ACDEFGHIKLMNPQRSTVWY'
 PADDING_CHAR = 'J'
@@ -15,89 +16,46 @@ class ESMSequenceModel(nn.Module):
     projected to `out_dim`.
     """
 
-    def __init__(self, cfg, device=torch.device('cpu')):
+    def __init__(self, cfg):
         super().__init__()
         self.cfg = cfg
-        self.device = device
-        try:
-            import esm
-        except Exception as e:
-            raise ImportError("ESM package not available. Install `pip install fair-esm` or similar. Error: {}".format(e))
 
-        model_name = getattr(cfg, 'model_name', 'esm2_t6_8M_UR50D')
-        # Load a reasonably small default model unless configured otherwise.
-        try:
-            self.esm_model, self.alphabet = esm.pretrained.load_model_and_alphabet(model_name)
-        except Exception:
-            # Try fallback by name in pretrained dict
-            try:
-                model_ctor = esm.pretrained.__dict__.get(model_name)
-                if model_ctor is None:
-                    raise RuntimeError(f"ESM model '{model_name}' not found in esm.pretrained")
-                self.esm_model, self.alphabet = model_ctor()
-            except Exception as e:
-                raise RuntimeError(f"Unable to load ESM model '{model_name}': {e}")
-
-        self.esm_model = self.esm_model.to(device)
+        esm_variant = getattr(cfg, 'esm_variant', 'esm2_t6_8M_UR50D')
+        self.esm_model, self.alphabet = esm.pretrained.esm2_t33_650M_UR50D()
         self.batch_converter = self.alphabet.get_batch_converter()
+        self.CLS, self.EOS, self.PAD = alphabet.cls_idx, alphabet.eos_idx, alphabet.padding_idx
 
-        esm_dim = getattr(self.esm_model, 'embed_dim', None)
-        if esm_dim is None:
-            # fallback size
-            esm_dim = 1280
-
+        esm_dim = getattr(self.esm_model, 'embed_dim', 1280)
         out_dim = getattr(cfg, 'out_dim', 128)
         self.proj = nn.Linear(esm_dim, out_dim)
 
-        if getattr(cfg, 'freeze_esm', True):
+        if getattr(cfg, "freeze_esm", True):
             for p in self.esm_model.parameters():
-                p.requires_grad = False
-            self.esm_model.eval()
+                p.requires_grad_(False)
+            self.esm_model.freeze()
+    
+    def tokenize(self, sequences):
+        data = [(f"protein_{i}", seq) for i, seq in enumerate(sequences)]
+        return self.batch_converter(data)
 
-    def _tokens_to_strings(self, tokens: torch.Tensor, vocab: str) -> List[str]:
-        # tokens may be LongTensor of shape (B, L) or (B, L, 1), or one-hot (B, L, C)
-        if tokens.dim() == 3 and tokens.size(-1) != 1:
-            # one-hot
-            tokens = tokens.argmax(dim=-1)
-        if tokens.dim() == 3 and tokens.size(-1) == 1:
-            tokens = tokens.squeeze(-1)
+    def aggregate(self, batch_tokens, token_reps):
+        mask = (batch_tokens != PAD) & (batch_tokens != CLS) & (batch_tokens != EOS)  # (B, T)
+        # expand mask to (B, T, 1) and compute masked mean
+        masked = token_reps * mask.unsqueeze(-1)
+        lengths = mask.sum(dim=1).clamp(min=1).unsqueeze(-1)  # (B, 1)
+        seq_reprs = masked.sum(dim=1) / lengths              # (B, C)  ← per-sequence embedding
+        return self.batch_converter(data)
 
-        tokens = tokens.cpu().long().numpy()
-        out = []
-        pad_char = getattr(self.cfg, 'pad_char', PADDING_CHAR)
-        for seq in tokens:
-            chars = []
-            for idx in seq:
-                if idx < 0 or idx >= len(vocab):
-                    ch = 'X'
-                else:
-                    ch = vocab[idx]
-                    if ch == pad_char:
-                        ch = 'X'
-                chars.append(ch)
-            out.append(''.join(chars))
-        return out
+    def forward(self, peptide_sequences, mhc_sequences):
+        peptide_labels, peptide_strs, peptide_tokens = tokenize(peptide_sequences)
+        mhc_labels, mhc_strs, mhc_tokens = self.tokenize(mhc_sequences)
 
-    @torch.no_grad()
-    def forward(self, peptide_tokens: torch.Tensor, mhc_tokens: torch.Tensor):
-        # Combine peptide and MHC by simple concatenation (configurable later)
-        vocab = getattr(self.cfg, 'vocab', AMINO_ACIDS + PADDING_CHAR)
-        pep_strs = self._tokens_to_strings(peptide_tokens, vocab)
-        mhc_strs = self._tokens_to_strings(mhc_tokens, vocab)
-
-        combined = [p + mh for p, mh in zip(pep_strs, mhc_strs)]
-        batch = [(str(i), seq) for i, seq in enumerate(combined)]
-        labels, strs, toks = self.batch_converter(batch)
-        toks = toks.to(self.device)
-
-        # Run through ESM
-        results = self.esm_model(toks, repr_layers=[self.esm_model.num_layers if hasattr(self.esm_model, 'num_layers') else max(getattr(self.esm_model, 'layers', [0]))], return_contacts=False)
-        reprs = results['representations']
-        layer = max(reprs.keys())
-        token_reprs = reprs[layer]
-
-        # exclude BOS/EOS
-        token_reprs = token_reprs[:, 1:toks.size(1)-1, :]
-        seq_repr = token_reprs.mean(1)
-        emb = self.proj(seq_repr)
-        return emb
+        peptide_out = self.esm_model(peptide_tokens, repr_layers=[self.cfg.rep_layer], return_contacts=False)   
+        peptide_reps = peptide_out["representations"][33]       
+        mhc_out = self.esm_model(mhc_tokens, repr_layers=[self.cfg.rep_layer], return_contacts=False)    
+        mhc_reps = mhc_out["representations"][33]
+        
+        if(self.cfg.aggregate):
+            peptide_reps = self.aggregate(peptide_tokens, peptide_reps)
+            mhc_reps = self.aggregate(mhc_tokens, mhc_reps)
+        return peptide_reps, mhc_reps

@@ -9,8 +9,13 @@ data:
 
 model:
   sequence:
-    in_dim: 32
+    freeze_esm: true
+    aggregate: true
+    rep_layer: 33
+    esm_variant: esm2_t33_650M_UR50D
     out_dim: 32
+    
+
 
 sequence:
   use_esm: True

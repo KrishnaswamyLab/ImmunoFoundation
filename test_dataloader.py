@@ -27,5 +27,6 @@ def main():
             collate_fn=custom_collate
         )
     batch = next(iter(train_loader))
+    import pdb; pdb.set_trace()
 if __name__ == "__main__":
     main()

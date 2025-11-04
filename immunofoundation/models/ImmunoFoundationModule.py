@@ -8,7 +8,7 @@ import pandas as pd
 import logging
 from pytorch_lightning import LightningModule
 
-from immunofoundation.models.components.SequenceModel import SequenceModel
+from immunofoundation.models.components.ESMSequenceModel import ESMSequenceModel
 from immunofoundation.models.components.StructureModel import StructureModel
 from immunofoundation.models.components.BiochemicalModel import BiochemicalModel
 
@@ -18,10 +18,8 @@ class ImmunoFoundationModule(LightningModule):
     def __init__(self,model_cfg):
         super().__init__()
         self.model_cfg = model_cfg
-        self.sequence_model = SequenceModel(model_cfg.sequence)
+        self.sequence_model = ESMSequenceModel(model_cfg.sequence)
 
-        print(model_cfg.sequence)
-        print('ImmunoModel')
     
     def loss_sequence_model(self,embeddings):
 

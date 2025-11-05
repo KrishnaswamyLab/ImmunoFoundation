@@ -5,6 +5,8 @@ from torch.utils.data import Dataset
 
 from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence
 from immunofoundation.data.components.preprocess import extract_biochemical_properties
+import warnings
+warnings.filterwarnings("ignore")
 
 # TODO: define amino acids to indices map as constant and use within __getitem__
 

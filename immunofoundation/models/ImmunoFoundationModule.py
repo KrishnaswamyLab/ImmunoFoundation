@@ -19,21 +19,15 @@ class ImmunoFoundationModule(LightningModule):
         super().__init__()
         self.model_cfg = model_cfg
         self.sequence_model = ESMSequenceModel(model_cfg.sequence)
-
-    
-    def loss_sequence_model(self,embeddings):
-
-        mse_loss = [10.0] #placeholder
-
-        return mse_loss
+        self.structure_model = StructureModel(model_cfg.structure)
+        self.bio_model = BiochemicalModel(model_cfg.bio_chem)
     
     def training_step(self,batch,stage):
 
-        seq_embeddings = self.sequence_model(batch['peptide_sequence'],batch['mhc_sequence'])
-
-        loss = self.loss_sequence_model(seq_embeddings)
-
-        return loss
+        peptide_seq_embeddings, mhc_seq_embeddings = self.sequence_model(batch['peptide_sequence'],batch['mhc_sequence'])
+        peptide_struct_embeddings, mhc_struct_embeddings = self.structure_model(batch['peptide_coords'], batch['mhc_coords'])
+        bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
+        return peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings
     
     def configure_optimizers(self):
         # Use optimizer config if provided in model_cfg, otherwise default

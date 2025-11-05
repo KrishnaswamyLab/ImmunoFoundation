@@ -10,11 +10,20 @@ data:
 model:
   sequence:
     freeze_esm: true
-    aggregate: true
+    aggregate: false
     rep_layer: 33
     esm_variant: esm2_t33_650M_UR50D
     out_dim: 32
-    
+  structure:
+    out_dim: 32
+    n_heads: 8
+    dim_ffn: 256
+    n_layers: 4
+  bio_chem:
+    n_bio_prop: 93 #DO NOT CHANGE THIS
+    hidden_dim: 64
+    out_dim: 32
+    n_layers: 4
 
 
 sequence:

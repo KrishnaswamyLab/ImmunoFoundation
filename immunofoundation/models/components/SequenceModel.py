@@ -1,43 +1,42 @@
-
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
+class StructureModel(nn.Module):
+    def __init__(self, struc_cfg):
+        super().__init__()
+        self.cfg = struc_cfg
+        self.projection = nn.Linear(3, self.cfg.out_dim)
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.cfg.out_dim, nhead=self.cfg.n_heads, dim_feedforward=self.cfg.dim_ffn, batch_first=True
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.cfg.n_layers)
+
+    def forward(self, peptide_adj, mhc_adj, peptide_coords, mhc_coords):
+        projected_peptide_coords = self.projection(peptide_coords)
+        projected_mhc_coords = self.projection(mhc_coords)
+        return self.encoder(projected_peptide_coords), self.encoder(projected_mhc_coords)
 
 class SequenceModel(nn.Module):
-    def __init__(self, sequence_model_cfg):
+    """Simple wrapper around Facebook ESM models.
+
+    Expects token tensors (either integer token ids or one-hot) for peptides and MHC.
+    The model will convert tokens to strings using `vocab` from config and pass
+    them to a pretrained ESM model. The resulting sequence representation is
+    projected to `out_dim`.
+    """
+
+    def __init__(self, seq_cfg):
         super().__init__()
-        self.cfg = sequence_model_cfg
-        self.use_esm = getattr(sequence_model_cfg, 'use_esm', False)
-        if self.use_esm:
-            # lazy import of ESM wrapper
-            from .ESMSequenceModel import ESMSequenceModel
-            self.encoder = ESMSequenceModel(sequence_model_cfg)
-            out_dim = getattr(sequence_model_cfg, 'out_dim', 128)
-            self.out_dim = out_dim
-        else:
-            in_dim = getattr(sequence_model_cfg, 'in_dim')
-            out_dim = getattr(sequence_model_cfg, 'out_dim')
-            self.linear = nn.Linear(in_dim, out_dim)
-            self.out_dim = out_dim
+        self.cfg = seq_cfg
+        encoder_layer = nn.TransformerEncoderLayer(
+            d_model=self.cfg.esm_dim, nhead=self.cfg.n_heads, dim_feedforward=self.cfg.dim_ffn, batch_first=True
+        )
+        self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.cfg.n_layers)
+        self.projection = nn.Linear(self.cfg.esm_dim, self.cfg.out_dim)
 
-        print(sequence_model_cfg)
+    def forward(self, peptide_embeddings, mhc_embeddings):
+        peptide_embeddings = self.encoder(peptide_embeddings)
+        mhc_embeddings = self.encoder(mhc_embeddings)
 
-    def forward(self, peptides_tokens, mhc_tokens):
-        '''
-            peptides_tokens: torch.LongTensor or one-hot tensor
-            mhc_tokens: torch.LongTensor or one-hot tensor
-
-            returns:
-                embeddings: torch.FloatTensor of shape [B, D]
-        '''
-
-        if self.use_esm:
-            # ESMSequenceModel handles conversion and returns (B, out_dim)
-            return self.encoder(peptides_tokens, mhc_tokens)
-
-        # fallback simple linear approach: sum inputs and apply linear
-        # ensure we have a float tensor
-        x = peptides_tokens + mhc_tokens
-        if not isinstance(x, torch.Tensor):
-            x = torch.tensor(x, dtype=torch.float32)
-        return self.linear(x)
+        return self.projection(peptide_embeddings), self.projection(mhc_embeddings)

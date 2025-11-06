@@ -3,11 +3,7 @@ import torch.nn as nn
 from typing import List
 import esm
 
-AMINO_ACIDS = 'ACDEFGHIKLMNPQRSTVWY'
-PADDING_CHAR = 'J'
-
-
-class ESMSequenceModel(nn.Module):
+class ESM(nn.Module):
     """Simple wrapper around Facebook ESM models.
 
     Expects token tensors (either integer token ids or one-hot) for peptides and MHC.
@@ -25,15 +21,6 @@ class ESMSequenceModel(nn.Module):
         self.batch_converter = self.alphabet.get_batch_converter()
         self.CLS, self.EOS, self.PAD = self.alphabet.cls_idx, self.alphabet.eos_idx, self.alphabet.padding_idx
 
-        esm_dim = getattr(self.esm_model, 'embed_dim', 1280)
-        out_dim = getattr(self.cfg, 'out_dim', 128)
-        self.projection = nn.Linear(esm_dim, out_dim)
-
-        if getattr(self.cfg, "freeze_esm", True):
-            for p in self.esm_model.parameters():
-                p.requires_grad_(False)
-            self.esm_model.eval()
-    
     def tokenize(self, sequences):
         data = [(f"protein_{i}", seq) for i, seq in enumerate(sequences)]
         return self.batch_converter(data)
@@ -58,4 +45,4 @@ class ESMSequenceModel(nn.Module):
         if(self.cfg.aggregate):
             peptide_reps = self.aggregate(peptide_tokens, peptide_reps)
             mhc_reps = self.aggregate(mhc_tokens, mhc_reps)
-        return self.projection(peptide_reps), self.projection(mhc_reps)
+        return peptide_reps, mhc_reps

@@ -57,6 +57,10 @@ class ImmunoDataset(Dataset):
         else:
             final_features['peptide_adj'] = None
             final_features['mhc_adj'] = None
+        peptide_distances = torch.cdist(final_features['peptide_coords'], final_features['peptide_coords'], 2)
+        mhc_distances = torch.cdist(final_features['mhc_coords'], final_features['mhc_coords'], 2)
+        final_features['peptide_mask'] = self.mask_residues((peptide_distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
+        final_features['mhc_mask'] = self.mask_residues((mhc_distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
         return final_features
 
     def __getitem__(self, idx):
@@ -66,6 +70,13 @@ class ImmunoDataset(Dataset):
     
     def __len__(self):
         return len(self.csv)
+
+    def mask_residues(self, x):
+        true_indices = torch.nonzero(x, as_tuple=True)[0]
+        num_to_flip = int(len(true_indices) * self.data_cfg.mask.mask_rate)
+        flip_indices = true_indices[torch.randperm(len(true_indices))[:num_to_flip]]
+        x[flip_indices] = False
+        return x.long()
 
 def pad(x: np.ndarray, max_len: int, pad_idx=0, use_torch=False, reverse=False):
     """Right pads dimension of numpy array.
@@ -143,6 +154,8 @@ def custom_collate(batch_list):
         peptide_adjs = torch.utils.data.default_collate([0]*len(batch_list))
         mhc_adjs = torch.utils.data.default_collate([0]*len(batch_list))
     biochemical_properties = torch.utils.data.default_collate([torch.tensor(rec['biochemical_properties']).float() for rec in batch_list])
+    peptide_masks = torch.utils.data.default_collate([torch.tensor(rec['peptide_mask']).float() for rec in batch_list])
+    mhc_masks = torch.utils.data.default_collate([torch.tensor(rec['mhc_mask']).float() for rec in batch_list])
     mhc_sequences = torch.utils.data.default_collate([rec['mhc_sequence'] for rec in batch_list])
     peptide_sequences = torch.utils.data.default_collate([rec['peptide_sequence'] for rec in batch_list])
     # TODO: include integer amino acid indices
@@ -153,5 +166,7 @@ def custom_collate(batch_list):
         "mhc_adjs": mhc_adjs,
         "biochemical_properties": biochemical_properties,
         "mhc_sequence": mhc_sequences,
-        "peptide_sequence": peptide_sequences
+        "peptide_sequence": peptide_sequences,
+        "mhc_masks": mhc_masks,
+        "peptide_masks": peptide_masks
     }

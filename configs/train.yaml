@@ -6,6 +6,10 @@ data:
   num_workers: 4
   prefetch_factor: 100
   csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata.csv
+  structure:
+    adj: false
+    graph_type: knn
+    k: 5
 
 model:
   sequence:

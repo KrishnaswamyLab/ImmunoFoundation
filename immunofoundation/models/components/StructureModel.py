@@ -13,7 +13,7 @@ class StructureModel(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.cfg.n_layers)
 
-    def forward(self, peptide_coords, mhc_coords):
+    def forward(self, peptide_adj, mhc_adj, peptide_coords, mhc_coords):
         projected_peptide_coords = self.projection(peptide_coords)
         projected_mhc_coords = self.projection(mhc_coords)
         return self.encoder(projected_peptide_coords), self.encoder(projected_mhc_coords)

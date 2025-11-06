@@ -9,9 +9,9 @@ import logging
 from pytorch_lightning import LightningModule
 
 from immunofoundation.models.components.ESMSequenceModel import ESMSequenceModel
+from immunofoundation.models.components.SequenceModel import SequenceModel
 from immunofoundation.models.components.StructureModel import StructureModel
 from immunofoundation.models.components.BiochemicalModel import BiochemicalModel
-
 
 class ImmunoFoundationModule(LightningModule):
 

@@ -1,6 +1,8 @@
 import pandas as pd
 import torch
 import numpy as np
+from sklearn.neighbors import kneighbors_graph
+
 from torch.utils.data import Dataset
 
 from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence
@@ -48,7 +50,12 @@ class ImmunoDataset(Dataset):
         final_features['peptide_sequence'] = sequence_peptide
         final_features['mhc_sequence'] = sequence_mhc
         final_features['biochemical_properties'] = torch.from_numpy(biochemical_properties)
-
+        if self.data_cfg.structure.adj:
+            final_features['peptide_adj'] = kneighbors_graph(ca_coords_peptide, n_neighbors = self.data_cfg.structure.k)
+            final_features['mhc_adj'] = kneighbors_graph(ca_coords_mhc, n_neighbors = self.data_cfg.structure.k)
+        else:
+            final_features['peptide_adj'] = None
+            final_features['mhc_adj'] = None
         return final_features
 
     def __getitem__(self, idx):

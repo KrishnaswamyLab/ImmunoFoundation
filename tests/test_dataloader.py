@@ -3,16 +3,12 @@ from immunofoundation.data.components.ImmunoDataset import custom_collate
 from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from types import SimpleNamespace
+from omegaconf import OmegaConf
 
 
 def main():
-    data_cfg = SimpleNamespace(**{
-            "batch_size": 5,
-            "max_batch_size": 5,
-            "num_workers": 0,
-            "prefetch_factor": 100,
-            "csv_path": "/home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata.csv"
-        })
+    cfg = OmegaConf.load("configs/train.yaml")
+    data_cfg = cfg.data
     train_data = ImmunoDataset(
         data_cfg,
         is_training=True,
@@ -27,5 +23,6 @@ def main():
             collate_fn=custom_collate
         )
     batch = next(iter(train_loader))
+    import pdb; pdb.set_trace()
 if __name__ == "__main__":
     main()

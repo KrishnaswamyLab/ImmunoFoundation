@@ -13,19 +13,35 @@ from immunofoundation.models.components.SequenceModel import SequenceModel
 from immunofoundation.models.components.StructureModel import StructureModel
 from immunofoundation.models.components.BiochemicalModel import BiochemicalModel
 
+SEQUENCE_MODELS = {
+    "esm": ESMSequenceModel,
+}
+STRUCTURE_MODELS = {
+    "transformer": StructureModel,
+}
+BIOCHEM_MODELS = {
+    "mlp": BiochemicalModel,
+}
+
 class ImmunoFoundationModule(LightningModule):
 
     def __init__(self,model_cfg):
         super().__init__()
         self.model_cfg = model_cfg
-        self.sequence_model = ESMSequenceModel(model_cfg.sequence)
-        self.structure_model = StructureModel(model_cfg.structure)
-        self.bio_model = BiochemicalModel(model_cfg.bio_chem)
+        self.sequence_model = SEQUENCE_MODELS.get(model_cfg.sequence.model_type, 'esm')(model_cfg.sequence)
+        self.structure_model = STRUCTURE_MODELS.get(model_cfg.structure.model_type, 'transformer')(model_cfg.structure)
+        self.bio_model = BIOCHEM_MODELS.get(model_cfg.bio_chem.model_type, 'mlp')(model_cfg.bio_chem)
     
     def training_step(self,batch,stage):
 
         peptide_seq_embeddings, mhc_seq_embeddings = self.sequence_model(batch['peptide_sequence'],batch['mhc_sequence'])
         peptide_struct_embeddings, mhc_struct_embeddings = self.structure_model(batch['peptide_coords'], batch['mhc_coords'])
+        bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
+        return peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings
+    
+    def forward(self,batch):
+        peptide_seq_embeddings, mhc_seq_embeddings = self.sequence_model(batch['peptide_sequence'],batch['mhc_sequence'])
+        peptide_struct_embeddings, mhc_struct_embeddings = self.structure_model(batch['peptide_adjs'], batch['mhc_adjs'], batch['peptide_coords'], batch['mhc_coords'])
         bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
         return peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings
     

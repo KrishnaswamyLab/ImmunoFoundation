@@ -4,6 +4,7 @@ import numpy as np
 from sklearn.neighbors import kneighbors_graph
 
 from torch.utils.data import Dataset
+import torch.nn.functional as F
 
 from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence
 from immunofoundation.data.components.preprocess import extract_biochemical_properties
@@ -92,6 +93,39 @@ def pad(x: np.ndarray, max_len: int, pad_idx=0, use_torch=False, reverse=False):
         return torch.pad(x, pad_widths)
     return np.pad(x, pad_widths)
 
+def pad_square(x, max_len, use_torch=False, reverse=False):
+    """
+    Pads a 2D array (matrix) to shape (max_len, max_len) by adding zeros
+    to the right and bottom (or left/top if reverse=True).
+
+    Args:
+        x: numpy or torch array of shape (H, W)
+        max_len: int, desired final square size
+        use_torch: whether to use torch padding
+        reverse: if True, pad on the left/top instead of right/bottom
+
+    Returns:
+        Padded array of shape (max_len, max_len)
+    """
+    h, w = x.shape[:2]
+    pad_h = max_len - h
+    pad_w = max_len - w
+
+    if pad_h < 0 or pad_w < 0:
+        raise ValueError(f"Cannot pad: current ({h},{w}) > max_len {max_len}")
+
+    if reverse:
+        pad_spec = ((pad_h, 0), (pad_w, 0))
+    else:
+        pad_spec = ((0, pad_h), (0, pad_w))
+
+    if use_torch:
+        # torch.pad uses reversed order: (left, right, top, bottom)
+        # For 2D tensor, flatten spec accordingly:
+        pad = (pad_spec[1][0], pad_spec[1][1], pad_spec[0][0], pad_spec[0][1])
+        return torch.nn.functional.pad(x, pad)
+    else:
+        return np.pad(x, pad_spec)
 def custom_collate(batch_list):
     """
     `batch_list` is a list of dict containing:
@@ -102,6 +136,12 @@ def custom_collate(batch_list):
     # max_len_peptide = max(list(map(lambda len(x['peptide_len']) : x, batch_list)))
     padded_peptide_ca_coords = torch.utils.data.default_collate([pad(rec['peptide_coords'], max_len=max_len_peptide) for rec in batch_list])
     mhc_ca_coords = torch.utils.data.default_collate([rec['mhc_coords'] for rec in batch_list])
+    if(batch_list[0]['peptide_adj']):
+        peptide_adjs = torch.utils.data.default_collate([pad_square(rec['peptide_adj'], max_len=max_len_peptide) for rec in batch_list])
+        mhc_adjs = torch.utils.data.default_collate([pad_square(rec['mhc_adj'], max_len=max_len_peptide) for rec in batch_list])
+    else:
+        peptide_adjs = torch.utils.data.default_collate([0]*len(batch_list))
+        mhc_adjs = torch.utils.data.default_collate([0]*len(batch_list))
     biochemical_properties = torch.utils.data.default_collate([torch.tensor(rec['biochemical_properties']).float() for rec in batch_list])
     mhc_sequences = torch.utils.data.default_collate([rec['mhc_sequence'] for rec in batch_list])
     peptide_sequences = torch.utils.data.default_collate([rec['peptide_sequence'] for rec in batch_list])
@@ -109,6 +149,8 @@ def custom_collate(batch_list):
     return {
         "mhc_coords": mhc_ca_coords,
         "peptide_coords": padded_peptide_ca_coords,
+        "peptide_adjs": peptide_adjs,
+        "mhc_adjs": mhc_adjs,
         "biochemical_properties": biochemical_properties,
         "mhc_sequence": mhc_sequences,
         "peptide_sequence": peptide_sequences

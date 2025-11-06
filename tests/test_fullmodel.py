@@ -31,7 +31,7 @@ def main():
     batch = next(iter(train_loader))
     model = ImmunoFoundationModule(model_cfg)
     print("Initialized ImmunoFoundationModel model!!")
-    peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings = model.training_step(batch, None)
+    peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings = model(batch)
     print(f"peptide_seq_embeddings: {peptide_seq_embeddings.shape}")
     print(f"mhc_seq_embeddings: {mhc_seq_embeddings.shape}")
     print(f"peptide_struct_embeddings: {peptide_struct_embeddings.shape}")

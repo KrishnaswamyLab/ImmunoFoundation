@@ -22,16 +22,13 @@ class ImmunoDataset(Dataset):
     def _init_metadata(self):
         pdb_csv = pd.read_csv(self.data_cfg.csv_path)
         self.raw_csv = pdb_csv
+        num_records_80 = int(pdb_csv.shape[1]*self.data_cfg.train_size)-1
 
         if self.is_training:
-            # get first 80% of samples for training
-            num_records_80 = int(pdb_csv.shape[1]*0.8)-1
             pdb_csv = pdb_csv.iloc[:num_records_80, :]
             self.csv = pdb_csv
             print (f"Training: {len(self.csv)} samples")
         else:
-            # get remaining 20%% of samples for val/test
-            num_records_80 = int(pdb_csv.shape[1]*0.8)-1
             pdb_csv = pdb_csv.iloc[num_records_80:, :]
             self.csv = pdb_csv
             print (f"Validation: {len(self.csv)} samples")

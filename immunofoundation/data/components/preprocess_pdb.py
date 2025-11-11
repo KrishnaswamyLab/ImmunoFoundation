@@ -1,14 +1,13 @@
-from Bio.PDB import PDBParser
+from Bio.PDB import PDBParser, MMCIFParser
 from Bio.SeqUtils import seq1
 
 def extract_ca_and_sequence(pdb_file):
-    parser = PDBParser(QUIET=True)
+    parser = MMCIFParser(QUIET=True)
     structure = parser.get_structure('protein', pdb_file)
     model = structure[0]
     
     ca_coords_peptide = []
     sequence_peptide = []
-    
     if 'A' in model:
         for residue in model['A']:
             if 'CA' in residue:

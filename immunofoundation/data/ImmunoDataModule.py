@@ -30,6 +30,7 @@ class ImmunoDataModule(LightningDataModule):
 
         return DataLoader(
             self.data_train,
+            batch_size = self.data_cfg.batch_size,
             num_workers = num_workers,
             prefetch_factor=None if num_workers == 0 else self.data_cfg.prefetch_factor,
             pin_memory=False,
@@ -40,6 +41,7 @@ class ImmunoDataModule(LightningDataModule):
     def val_dataloader(self):
         return DataLoader(
             self.data_val,
+            batch_size = self.data_cfg.batch_size,
             num_workers=2,
             prefetch_factor=2,
             persistent_workers=True,

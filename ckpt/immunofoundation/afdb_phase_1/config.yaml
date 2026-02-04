@@ -1,0 +1,70 @@
+data:
+  batch_size: 16
+  max_batch_size: 16
+  num_workers: 0
+  train_size: 0.8
+  mono: true
+  prefetch_factor: 100
+  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata_monomer.csv
+  mask:
+    mask_rate: 0.5
+    max_distance: 8
+    max_neighbors: 12
+  structure:
+    adj: true
+    graph_type: knn
+    k: 15
+model:
+  sequence:
+    model_type: esm
+    freeze_esm: true
+    aggregate: false
+    esm_dim: 1280
+    rep_layer: 33
+    esm_variant: esm2_t33_650M_UR50D
+    out_dim: 32
+    n_heads: 8
+    dim_ffn: 256
+    n_layers: 4
+  structure:
+    model_type: transformer
+    out_dim: 32
+    n_heads: 8
+    dim_ffn: 256
+    n_layers: 4
+  bio_chem:
+    model_type: mlp
+    n_bio_prop: 93
+    hidden_dim: 64
+    out_dim: 32
+    n_layers: 4
+optimizer:
+  lr: 0.0001
+  weight_decay: 1.0e-06
+experiment:
+  debug: false
+  num_devices: 1
+  wandb:
+    name: afdb_phase_1
+    project: immunofoundation
+    save_code: false
+    tags: []
+    mode: online
+  optimizer:
+    lr: 0.0001
+  trainer:
+    min_epochs: 1
+    max_epochs: 200
+    accelerator: gpu
+    log_every_n_steps: 1
+    deterministic: false
+    strategy: ddp
+    check_val_every_n_epoch: 20
+    accumulate_grad_batches: 4
+  checkpointer:
+    dirpath: ckpt/${experiment.wandb.project}/${experiment.wandb.name}/
+    save_last: true
+    save_top_k: 3
+    monitor: train/loss
+    mode: min
+    every_n_epochs: 40

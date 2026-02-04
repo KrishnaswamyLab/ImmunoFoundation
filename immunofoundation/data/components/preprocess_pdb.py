@@ -1,9 +1,17 @@
 from Bio.PDB import PDBParser, MMCIFParser
 from Bio.SeqUtils import seq1
+import gzip
+
+parser = MMCIFParser(QUIET=True)
+    
 
 def extract_ca_and_sequence(pdb_file):
     parser = MMCIFParser(QUIET=True)
-    structure = parser.get_structure('protein', pdb_file)
+    if pdb_file.endswith(".gz"):
+        with gzip.open(pdb_file, 'rt') as f:
+            structure = parser.get_structure('protein', f)
+    else:
+        structure = parser.get_structure('protein', pdb_file)
     model = structure[0]
     
     ca_coords_peptide = []

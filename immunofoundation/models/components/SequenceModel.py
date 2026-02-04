@@ -20,8 +20,7 @@ class SequenceModel(nn.Module):
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.cfg.n_layers)
         self.projection = nn.Linear(self.cfg.esm_dim, self.cfg.out_dim)
 
-    def forward(self, peptide_embeddings, mhc_embeddings):
-        peptide_embeddings = self.encoder(peptide_embeddings)
-        mhc_embeddings = self.encoder(mhc_embeddings)
+    def forward(self, embeddings):
+        embeddings = self.encoder(embeddings)
 
-        return self.projection(peptide_embeddings), self.projection(mhc_embeddings)
+        return self.projection(embeddings)

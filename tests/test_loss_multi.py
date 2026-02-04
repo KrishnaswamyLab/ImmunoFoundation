@@ -3,19 +3,19 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from omegaconf import OmegaConf
 
-from immunofoundation.data.components.ImmunoDataset import ImmunoDataset
-from immunofoundation.data.components.ImmunoDataset import custom_collate
-from immunofoundation.models.ImmunoFoundationModule import ImmunoFoundationModule
+from immunofoundation.data.components.ImmunoMultimerDataset import ImmunoMultimerDataset
+from immunofoundation.data.components.ImmunoMultimerDataset import custom_collate
+from immunofoundation.models.ImmunoFoundationMultimerModule import ImmunoFoundationMultimerModule
 
 
 
 def main():
-    cfg = OmegaConf.load("configs/train.yaml")
+    cfg = OmegaConf.load("configs/train_cancer.yaml")
     data_cfg = cfg.data
     model_cfg = cfg.model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_data = ImmunoDataset(
+    train_data = ImmunoMultimerDataset(
         data_cfg,
         is_training=True,
     )
@@ -29,8 +29,8 @@ def main():
             collate_fn=custom_collate
         )
     batch = next(iter(train_loader))
-    model = ImmunoFoundationModule(model_cfg)
-    print("Initialized ImmunoFoundationModel model!!")
+    model = ImmunoFoundationMultimerModule(model_cfg)
+    print("Initialized ImmunoFoundationMultimerModule model!!")
     losses = model.training_step(batch, None)
     print(losses)
 if __name__ == "__main__":

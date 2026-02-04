@@ -27,7 +27,7 @@ BIOCHEM_MODELS = {
     "mlp": BiochemicalModel,
 }
 
-class ImmunoFoundationModule(LightningModule):
+class ImmunoFoundationMultimerModule(LightningModule):
 
     def __init__(self,model_cfg):
         super().__init__()
@@ -42,18 +42,21 @@ class ImmunoFoundationModule(LightningModule):
         self.biochem_decoder = self.build_decoder(model_cfg.bio_chem.out_dim, model_cfg.bio_chem.out_dim*2, model_cfg.bio_chem.n_bio_prop)
         self.mlm_criterion = nn.CrossEntropyLoss(reduction='none')
 
-    def training_step(self,batch,stage):
+    def training_step(self, batch, stage):
         per_sample_losses = self.model_step(batch)
         total_losses = {k: v.mean() for k,v in per_sample_losses.items()}
         return sum(total_losses.values())
         
     def model_step(self, batch):
         with torch.no_grad():
-            peptide_seq_embeddings, mhc_seq_embeddings, peptide_tokens, mhc_tokens = self.aa_embedding_model(batch['peptide_sequence'],batch['mhc_sequence'], True)
+            peptide_seq_embeddings, peptide_tokens = self.aa_embedding_model(batch['peptide_sequence'], True)
+            mhc_seq_embeddings, mhc_tokens = self.aa_embedding_model(batch['mhc_sequence'], True)
         masked_peptide_seq_embeddings, masked_mhc_seq_embeddings, \
             masked_peptide_coords, masked_mhc_coords = self.mask_residues(peptide_seq_embeddings, mhc_seq_embeddings, batch)
-        peptide_seq_embeddings_with_mask, mhc_seq_embeddings_with_mask = self.sequence_model(masked_peptide_seq_embeddings, masked_mhc_seq_embeddings)
-        peptide_struct_embeddings, mhc_struct_embeddings = self.structure_model(batch['peptide_adjs'], batch['mhc_adjs'], masked_peptide_coords, masked_mhc_coords)
+        peptide_seq_embeddings_with_mask = self.sequence_model(masked_peptide_seq_embeddings)
+        mhc_seq_embeddings_with_mask = self.sequence_model(masked_mhc_seq_embeddings)
+        peptide_struct_embeddings = self.structure_model(batch['peptide_adjs'], masked_peptide_coords)
+        mhc_struct_embeddings = self.structure_model(batch['mhc_adjs'], masked_mhc_coords)
         bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
 
         recon_peptide_seq_embeddings = self.sequence_decoder(peptide_seq_embeddings_with_mask)
@@ -76,9 +79,12 @@ class ImmunoFoundationModule(LightningModule):
         return per_sample_losses
 
     def encode(self, batch):
-        peptide_seq_embeddings, mhc_seq_embeddings = self.aa_embedding_model(batch['peptide_sequence'],batch['mhc_sequence'])
-        peptide_seq_embeddings, mhc_seq_embeddings = self.sequence_model(peptide_seq_embeddings, mhc_seq_embeddings)
-        peptide_struct_embeddings, mhc_struct_embeddings = self.structure_model(batch['peptide_adjs'], batch['mhc_adjs'], batch['peptide_coords'], batch['mhc_coords'])
+        peptide_seq_embeddings = self.aa_embedding_model(batch['peptide_sequence'])
+        mhc_seq_embeddings = self.aa_embedding_model(batch['mhc_sequence'])
+        peptide_seq_embeddings = self.sequence_model(peptide_seq_embeddings)
+        mhc_seq_embeddings = self.sequence_model(mhc_seq_embeddings)
+        peptide_struct_embeddings = self.structure_model(batch['peptide_adjs'], batch['peptide_coords'])
+        mhc_struct_embeddings = self.structure_model(batch['mhc_adjs'], batch['mhc_coords'])
         bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
         return peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings
 

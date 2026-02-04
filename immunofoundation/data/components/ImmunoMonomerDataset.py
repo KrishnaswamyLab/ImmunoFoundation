@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 
 # TODO: define amino acids to indices map as constant and use within __getitem__
 
-class ImmunoDataset(Dataset):
+class ImmunoMonomerDataset(Dataset):
     def __init__(self, data_cfg, is_training):
         self.data_cfg = data_cfg
         self.is_training = is_training
@@ -22,8 +22,7 @@ class ImmunoDataset(Dataset):
     def _init_metadata(self):
         pdb_csv = pd.read_csv(self.data_cfg.csv_path)
         self.raw_csv = pdb_csv
-        num_records_80 = int(pdb_csv.shape[1]*self.data_cfg.train_size)-1
-
+        num_records_80 = int(pdb_csv.shape[0]*self.data_cfg.train_size)-1
         if self.is_training:
             pdb_csv = pdb_csv.iloc[:num_records_80, :]
             self.csv = pdb_csv
@@ -37,27 +36,18 @@ class ImmunoDataset(Dataset):
         '''
             returns: final_features: Dict containing all the information necessary for the model to train
         '''
-        ca_coords_peptide, sequence_peptide, ca_coords_mhc, sequence_mhc = extract_ca_and_sequence(csv_row['pdb_path'])
-        biochemical_properties = extract_biochemical_properties(csv_row)
+        coords, sequence, _, _ = extract_ca_and_sequence(csv_row['cif_path'])
 
         final_features = {}
-        final_features['peptide_len'] = len(sequence_peptide)
-        final_features['mhc_len'] = len(sequence_mhc)
-        final_features['peptide_coords'] = torch.tensor(ca_coords_peptide).float()
-        final_features['mhc_coords'] = torch.tensor(ca_coords_mhc).float()
-        final_features['peptide_sequence'] = sequence_peptide
-        final_features['mhc_sequence'] = sequence_mhc
-        final_features['biochemical_properties'] = torch.from_numpy(biochemical_properties)
+        final_features['len'] = len(sequence)
+        final_features['coords'] = torch.tensor(coords).float()
+        final_features['sequence'] = sequence
         if self.data_cfg.structure.adj:
-            final_features['peptide_adj'] = kneighbors_graph(ca_coords_peptide, n_neighbors = self.data_cfg.structure.k)
-            final_features['mhc_adj'] = kneighbors_graph(ca_coords_mhc, n_neighbors = self.data_cfg.structure.k)
+            final_features['adj'] = kneighbors_graph(coords, n_neighbors = self.data_cfg.structure.k)
         else:
-            final_features['peptide_adj'] = None
-            final_features['mhc_adj'] = None
-        peptide_distances = torch.cdist(final_features['peptide_coords'], final_features['peptide_coords'], 2)
-        mhc_distances = torch.cdist(final_features['mhc_coords'], final_features['mhc_coords'], 2)
-        final_features['peptide_mask'] = self.mask_residues((peptide_distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
-        final_features['mhc_mask'] = self.mask_residues((mhc_distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
+            final_features['adj'] = None
+        distances = torch.cdist(final_features['coords'], final_features['coords'], 2)
+        final_features['mask'] = self.mask_residues((distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
         return final_features
 
     def __getitem__(self, idx):
@@ -121,49 +111,37 @@ def pad_square(x, max_len, use_torch=False, reverse=False):
 
     if pad_h < 0 or pad_w < 0:
         raise ValueError(f"Cannot pad: current ({h},{w}) > max_len {max_len}")
-
     if reverse:
         pad_spec = ((pad_h, 0), (pad_w, 0))
     else:
         pad_spec = ((0, pad_h), (0, pad_w))
 
     if use_torch:
-        # torch.pad uses reversed order: (left, right, top, bottom)
         # For 2D tensor, flatten spec accordingly:
         pad = (pad_spec[1][0], pad_spec[1][1], pad_spec[0][0], pad_spec[0][1])
-        return torch.nn.functional.pad(x, pad)
+        # Handle scipy sparse matrices by converting to dense array first
+        if hasattr(x, 'toarray'):
+            x = x.toarray()
+        return torch.nn.functional.pad(torch.tensor(x), pad)
     else:
         return np.pad(x, pad_spec)
-def custom_collate(batch_list):
+def custom_collate_mono(batch_list):
     """
     `batch_list` is a list of dict containing:
-    - peptide coords [N_pep_res, 3]
-    - MHC coords [N_mhc_res, 3]
+    - coords [N_pep_res, 3]
     """
-    max_len_peptide = max([x['peptide_len'] for x in batch_list])
-    # max_len_peptide = max(list(map(lambda len(x['peptide_len']) : x, batch_list)))
-    padded_peptide_ca_coords = torch.utils.data.default_collate([pad(rec['peptide_coords'], max_len=max_len_peptide) for rec in batch_list])
-    mhc_ca_coords = torch.utils.data.default_collate([rec['mhc_coords'] for rec in batch_list])
-    if(batch_list[0]['peptide_adj']):
-        peptide_adjs = torch.utils.data.default_collate([pad_square(rec['peptide_adj'], max_len=max_len_peptide) for rec in batch_list])
-        mhc_adjs = torch.utils.data.default_collate([pad_square(rec['mhc_adj'], max_len=max_len_peptide) for rec in batch_list])
+    max_len = max([x['len'] for x in batch_list])
+    padded_coords = torch.utils.data.default_collate([pad(rec['coords'], max_len=max_len) for rec in batch_list])
+    if batch_list[0]['adj'] is not None:
+        adjs = torch.utils.data.default_collate([pad_square(rec['adj'], max_len=max_len, use_torch=True) for rec in batch_list])
     else:
-        peptide_adjs = torch.utils.data.default_collate([0]*len(batch_list))
-        mhc_adjs = torch.utils.data.default_collate([0]*len(batch_list))
-    biochemical_properties = torch.utils.data.default_collate([torch.tensor(rec['biochemical_properties']).float() for rec in batch_list])
-    peptide_masks = torch.utils.data.default_collate([torch.tensor(rec['peptide_mask']).float() for rec in batch_list])
-    mhc_masks = torch.utils.data.default_collate([torch.tensor(rec['mhc_mask']).float() for rec in batch_list])
-    mhc_sequences = torch.utils.data.default_collate([rec['mhc_sequence'] for rec in batch_list])
-    peptide_sequences = torch.utils.data.default_collate([rec['peptide_sequence'] for rec in batch_list])
-    # TODO: include integer amino acid indices
+        adjs = torch.utils.data.default_collate([0]*len(batch_list))
+    masks = torch.utils.data.default_collate([pad(torch.tensor(rec['mask']).float(), max_len) for rec in batch_list])
+    sequences = torch.utils.data.default_collate([rec['sequence'] for rec in batch_list])
+
     return {
-        "mhc_coords": mhc_ca_coords,
-        "peptide_coords": padded_peptide_ca_coords,
-        "peptide_adjs": peptide_adjs,
-        "mhc_adjs": mhc_adjs,
-        "biochemical_properties": biochemical_properties,
-        "mhc_sequence": mhc_sequences,
-        "peptide_sequence": peptide_sequences,
-        "mhc_masks": mhc_masks,
-        "peptide_masks": peptide_masks
+        "coords": padded_coords,
+        "adjs": adjs,
+        "sequence": sequences,
+        "masks": masks,
     }

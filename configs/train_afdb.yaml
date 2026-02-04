@@ -1,20 +1,21 @@
 
 
 data:
-  batch_size: 5
-  max_batch_size: 5
+  batch_size: 16
+  max_batch_size: 16
   num_workers: 0
   train_size: 0.8
+  mono: true
   prefetch_factor: 100
-  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata.csv
+  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata_monomer.csv
   mask:
     mask_rate: 0.5
     max_distance: 8
     max_neighbors: 12
   structure:
-    adj: false
+    adj: true
     graph_type: knn
-    k: 5
+    k: 15
 
 model:
   sequence:
@@ -50,7 +51,7 @@ experiment:
   num_devices: 1
 
   wandb:
-    name: null
+    name: "afdb_phase_1"
     project: immunofoundation
     save_code: false
     tags: []
@@ -65,7 +66,7 @@ experiment:
     accelerator: gpu
     log_every_n_steps: 1
     deterministic: False
-    strategy: ddp #ddp
+    strategy: ddp
     check_val_every_n_epoch: 20
     accumulate_grad_batches: 4
 

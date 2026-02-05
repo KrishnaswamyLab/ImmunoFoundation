@@ -9,6 +9,7 @@ import torch
 import hydra
 import wandb
 from omegaconf import DictConfig, OmegaConf
+from datetime import datetime
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers.wandb import WandbLogger
@@ -50,7 +51,8 @@ class Experiment:
 
         if not self._exp_cfg.debug:
             # Checkpoint directory
-            ckpt_dir = self._exp_cfg.checkpointer.dirpath
+            run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ckpt_dir = self._exp_cfg.checkpointer.dirpath+"_"+run_id
             os.makedirs(ckpt_dir, exist_ok=True)
             log.info(f"Checkpoints saved to {ckpt_dir}")
 

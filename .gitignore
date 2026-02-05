@@ -38,6 +38,7 @@ outputs/
 multirun/
 
 # Checkpoints and model files
+ckpt/
 *.ckpt
 *.pth
 *.pt
@@ -68,6 +69,7 @@ saved_models/
 # *.hdf5
 
 # Logs and databases
+logs/
 *.log
 *.sql
 *.sqlite

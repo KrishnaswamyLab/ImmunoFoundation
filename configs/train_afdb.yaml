@@ -1,8 +1,8 @@
 
 
 data:
-  batch_size: 16
-  max_batch_size: 16
+  batch_size: 128
+  max_batch_size: 128
   num_workers: 0
   train_size: 0.8
   mono: true
@@ -67,13 +67,13 @@ experiment:
     log_every_n_steps: 1
     deterministic: False
     strategy: ddp
-    check_val_every_n_epoch: 20
+    check_val_every_n_epoch: 2
     accumulate_grad_batches: 4
 
   checkpointer:
-    dirpath: ckpt/${experiment.wandb.project}/${experiment.wandb.name}/
+    dirpath: ckpt/${experiment.wandb.project}/${experiment.wandb.name}
     save_last: True
     save_top_k: 3
-    monitor: train/loss
+    monitor: val/total_loss
     mode: min
     every_n_epochs: 40

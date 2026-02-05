@@ -52,7 +52,20 @@ class ImmunoFoundationMonomerModule(LightningModule):
         self.log("train/total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True)
 
         return total_loss
-        
+
+    def validation_step(self, batch, batch_idx):
+        per_sample_losses = self.model_step(batch)
+        total_losses = {k: v.mean() for k, v in per_sample_losses.items()}
+
+        # Log individual losses
+        for loss_name, loss_value in total_losses.items():
+            self.log(f"val/{loss_name}", loss_value, on_step=False, on_epoch=True, prog_bar=False)
+
+        total_loss = sum(total_losses.values())
+        self.log("val/total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        return total_loss
+
     def model_step(self, batch):
         with torch.no_grad():
             seq_embeddings, tokens = self.aa_embedding_model(batch['sequence'], True)

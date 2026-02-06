@@ -49,12 +49,10 @@ def extract_ca_and_sequence(pdb_file):
     sequence_peptide = ''.join(sequence_peptide)
     sequence_mhc = ''.join(sequence_mhc)
 
-    # Normalize ca_coords to [-1, 1] separately
-    if len(ca_coords_peptide):
-        pep = np.array(ca_coords_peptide)
-        ca_coords_peptide = (2 * (pep - pep.min()) / (pep.max() - pep.min()) - 1).tolist()
-    if len(ca_coords_mhc):
-        mhc = np.array(ca_coords_mhc)
-        ca_coords_mhc = (2 * (mhc - mhc.min()) / (mhc.max() - mhc.min()) - 1).tolist()
-
     return ca_coords_peptide, sequence_peptide, ca_coords_mhc, sequence_mhc
+
+
+def normalize_coords(coords):
+    """Normalize coordinates to [-1, 1]."""
+    coords = np.array(coords)
+    return 2 * (coords - coords.min()) / (coords.max() - coords.min()) - 1

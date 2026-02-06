@@ -6,7 +6,7 @@ from sklearn.neighbors import kneighbors_graph
 from torch.utils.data import Dataset
 import torch.nn.functional as F
 
-from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence
+from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence, normalize_coords
 from immunofoundation.data.components.preprocess import extract_biochemical_properties
 import warnings
 warnings.filterwarnings("ignore")
@@ -22,13 +22,13 @@ class ImmunoMonomerDataset(Dataset):
     def _init_metadata(self):
         pdb_csv = pd.read_csv(self.data_cfg.csv_path)
         self.raw_csv = pdb_csv
-        num_records_80 = int(pdb_csv.shape[0]*self.data_cfg.train_size)-1
+        train_len = int(pdb_csv.shape[0]*self.data_cfg.train_size)-1
         if self.is_training:
-            pdb_csv = pdb_csv.iloc[:num_records_80, :]
+            pdb_csv = pdb_csv.iloc[:train_len, :]
             self.csv = pdb_csv
             print (f"Training: {len(self.csv)} samples")
         else:
-            pdb_csv = pdb_csv.iloc[num_records_80:, :]
+            pdb_csv = pdb_csv.iloc[train_len:, :]
             self.csv = pdb_csv
             print (f"Validation: {len(self.csv)} samples")
 
@@ -36,18 +36,24 @@ class ImmunoMonomerDataset(Dataset):
         '''
             returns: final_features: Dict containing all the information necessary for the model to train
         '''
-        coords, sequence, _, _ = extract_ca_and_sequence(csv_row['cif_path'])
+        raw_coords, sequence, _, _ = extract_ca_and_sequence(csv_row['cif_path'])
 
         final_features = {}
         final_features['len'] = len(sequence)
-        final_features['coords'] = torch.tensor(coords).float()
         final_features['sequence'] = sequence
+
+        # Compute mask on raw Angstrom coordinates before normalization
+        raw_coords_tensor = torch.tensor(raw_coords).float()
+        distances = torch.cdist(raw_coords_tensor, raw_coords_tensor, 2)
+        final_features['mask'] = self.mask_residues((distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
+
+        # Normalize coords and build adjacency after masking
+        coords = normalize_coords(raw_coords)
+        final_features['coords'] = torch.tensor(coords).float()
         if self.data_cfg.structure.adj:
             final_features['adj'] = kneighbors_graph(coords, n_neighbors = self.data_cfg.structure.k)
         else:
             final_features['adj'] = None
-        distances = torch.cdist(final_features['coords'], final_features['coords'], 2)
-        final_features['mask'] = self.mask_residues((distances < self.data_cfg.mask.max_distance).sum(1) < self.data_cfg.mask.max_neighbors)
         return final_features
 
     def __getitem__(self, idx):

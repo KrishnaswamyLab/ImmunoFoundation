@@ -1,0 +1,128 @@
+import torch
+import time
+import os
+import random
+import wandb
+import numpy as np
+import pandas as pd
+import logging
+from pytorch_lightning import LightningModule
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from immunofoundation.models.components.ESM import ESM
+from immunofoundation.models.components.SequenceModel import SequenceModel
+from immunofoundation.models.components.StructureModel import StructureModel
+from immunofoundation.models.components.BiochemicalModel import BiochemicalModel
+
+SEQUENCE_MODELS = {
+    "esm": ESM,
+}
+STRUCTURE_MODELS = {
+    "transformer": StructureModel,
+}
+BIOCHEM_MODELS = {
+    "mlp": BiochemicalModel,
+}
+
+class ImmunoFoundationMonomerModule(LightningModule):
+
+    def __init__(self,model_cfg):
+        super().__init__()
+        self.model_cfg = model_cfg
+        self.aa_embedding_model = SEQUENCE_MODELS.get(model_cfg.sequence.model_type, 'esm')(model_cfg.sequence)
+        self.sequence_model = SequenceModel(model_cfg.sequence)
+        self.structure_model = STRUCTURE_MODELS.get(model_cfg.structure.model_type, 'transformer')(model_cfg.structure)
+        self.mlm_decoder = nn.Linear(model_cfg.sequence.out_dim, 20)
+        self.sequence_decoder = self.build_decoder(model_cfg.sequence.out_dim, model_cfg.sequence.out_dim*2, model_cfg.sequence.esm_dim)
+        self.structure_decoder = self.build_decoder(model_cfg.structure.out_dim, int(model_cfg.structure.out_dim//2), 3)
+        self.mlm_criterion = nn.CrossEntropyLoss(reduction='none')
+
+    def training_step(self, batch, stage):
+        per_sample_losses = self.model_step(batch)
+        total_losses = {k: v.mean() for k,v in per_sample_losses.items()}
+
+        # Log individual losses
+        for loss_name, loss_value in total_losses.items():
+            self.log(f"train/{loss_name}", loss_value, on_step=True, on_epoch=True, prog_bar=False)
+
+        total_loss = sum(total_losses.values())
+        self.log("train/total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True)
+
+        return total_loss
+
+    def validation_step(self, batch, batch_idx):
+        per_sample_losses = self.model_step(batch)
+        total_losses = {k: v.mean() for k, v in per_sample_losses.items()}
+
+        # Log individual losses
+        for loss_name, loss_value in total_losses.items():
+            self.log(f"val/{loss_name}", loss_value, on_step=False, on_epoch=True, prog_bar=False)
+
+        total_loss = sum(total_losses.values())
+        self.log("val/total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True)
+
+        return total_loss
+
+    def model_step(self, batch):
+        with torch.no_grad():
+            seq_embeddings, tokens = self.aa_embedding_model(batch['sequence'], True)
+        masked_seq_embeddings, masked_coords = self.mask_residues(seq_embeddings, batch)
+        seq_embeddings_with_mask = self.sequence_model(masked_seq_embeddings)
+        struct_embeddings = self.structure_model(batch['adjs'], masked_coords)
+
+        recon_seq_embeddings = self.sequence_decoder(seq_embeddings_with_mask)
+        recon_sturct_embeddings = self.structure_decoder(struct_embeddings)
+
+        predicted_residues = self.mlm_decoder(seq_embeddings_with_mask)
+        per_sample_losses = {}
+        per_sample_losses['recon_loss_seq'] = self.mae_loss(seq_embeddings, recon_seq_embeddings, batch['masks'])
+        per_sample_losses['recon_loss_struct'] = self.mae_loss(batch['coords'], recon_sturct_embeddings, batch['masks'])
+        per_sample_losses['mlm_loss'] = self.mlm_loss(predicted_residues, tokens)
+        return per_sample_losses
+
+    def encode(self, batch):
+        seq_embeddings = self.aa_embedding_model(batch['sequence'])
+        seq_embeddings = self.sequence_model(seq_embeddings)
+        struct_embeddings = self.structure_model(batch['adjs'], batch['coords'])
+        return seq_embeddings, struct_embeddings
+
+    def configure_optimizers(self):
+        # Use optimizer config if provided in model_cfg, otherwise default
+        opt_cfg = getattr(self.model_cfg, 'optimizer', None)
+        if opt_cfg is None:
+            return torch.optim.AdamW(self.parameters(), lr=1e-4)
+        # expect opt_cfg to be a namespace/dict compatible with torch.optim.AdamW args
+        kwargs = {}
+        if hasattr(opt_cfg, 'lr'):
+            kwargs['lr'] = opt_cfg.lr
+        if hasattr(opt_cfg, 'weight_decay'):
+            kwargs['weight_decay'] = opt_cfg.weight_decay
+        return torch.optim.AdamW(self.parameters(), **kwargs)
+
+    def mask_residues(self, seq_embeddings, batch):
+        masked_seq_embeddings = seq_embeddings*(1-batch['masks']).unsqueeze(-1)
+        masked_coords = batch['coords']*(1-batch['masks']).unsqueeze(-1)
+        return masked_seq_embeddings, masked_coords
+    
+    def mae_loss(self, x, x_hat, mask):
+        mse_per_token = F.mse_loss(x_hat, x, reduction='none').mean(dim=-1)
+        mask = mask.float()
+        mask_count = mask.sum(dim=-1).clamp(min=1)
+        per_sample_loss = (mse_per_token * mask).sum(dim=-1) / mask_count
+        return per_sample_loss
+    
+    def mlm_loss(self, logits, true):
+        loss_per_token = self.mlm_criterion(logits.view(-1, logits.size(-1)), true.view(-1))
+        return loss_per_token.view(logits.size(0), logits.size(1)).mean(1)
+
+    def build_decoder(self, input_dim, hidden_dim, output_dim):
+        return nn.Sequential(
+            nn.Linear(input_dim, hidden_dim),  
+            nn.ReLU(),           
+            nn.Linear(hidden_dim, hidden_dim),  
+            nn.ReLU(),           
+            nn.Linear(hidden_dim, output_dim),   
+        )

@@ -5,8 +5,9 @@ data:
   max_batch_size: 5
   num_workers: 0
   train_size: 0.8
+  mono: false
   prefetch_factor: 100
-  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata.csv
+  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata_multimer.csv
   mask:
     mask_rate: 0.5
     max_distance: 8
@@ -14,7 +15,7 @@ data:
   structure:
     adj: false
     graph_type: knn
-    k: 5
+    k: 15
 
 model:
   sequence:

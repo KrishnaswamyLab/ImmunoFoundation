@@ -9,6 +9,7 @@ import torch
 import hydra
 import wandb
 from omegaconf import DictConfig, OmegaConf
+from datetime import datetime
 
 from pytorch_lightning import Trainer
 from pytorch_lightning.loggers.wandb import WandbLogger
@@ -16,7 +17,8 @@ from pytorch_lightning.trainer import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
 
 # IMPORT PROJECT MODULES
-from immunofoundation.models.ImmunoFoundationModule import ImmunoFoundationModule
+from immunofoundation.models.ImmunoFoundationMonomerModule import ImmunoFoundationMonomerModule
+from immunofoundation.models.ImmunoFoundationMultimerModule import ImmunoFoundationMultimerModule
 from immunofoundation.data.ImmunoDataModule import ImmunoDataModule
 
 import immunofoundation.utils as eu 
@@ -30,39 +32,44 @@ class Experiment:
         self._cfg = cfg
         self._data_cfg = cfg.data
         self._exp_cfg = cfg.experiment
-        self._model = ImmunoFoundationModule(self._cfg.model)
+        if self._data_cfg.mono:
+            self._model = ImmunoFoundationMonomerModule(self._cfg.model)
+        else:
+            self._model = ImmunoFoundationMultimerModule(self._cfg.model)
         self._datamodule = ImmunoDataModule(self._cfg.data)
  
     def train(self):
         callbacks = []
         
-        if self._exp_cfg.debug:
-            # log.info("Debug mode.")
-            logger = None
-
+        # Initialize wandb logger if name is specified
+        if self._exp_cfg.wandb.get("name"):
+            logger = WandbLogger(**self._exp_cfg.wandb)
+            log.info(f"Wandb initialized: {self._exp_cfg.wandb.name}")
         else:
-            # logger = WandbLogger(**self._exp_cfg.wandb,)
-            #TODO implement the logger
             logger = None
+            log.info("Wandb disabled (no name specified)")
 
+        if not self._exp_cfg.debug:
             # Checkpoint directory
-            ckpt_dir = self._exp_cfg.checkpointer.dirpath
+            run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+            ckpt_dir = self._exp_cfg.checkpointer.dirpath+"_"+run_id
             os.makedirs(ckpt_dir, exist_ok=True)
-            # log.info(f"Checkpoints saved to {ckpt_dir}")
-            
+            log.info(f"Checkpoints saved to {ckpt_dir}")
+
             # Model checkpoints
             callbacks.append(ModelCheckpoint(**self._exp_cfg.checkpointer))
-            
+
             # Save config
             cfg_path = os.path.join(ckpt_dir, 'config.yaml')
             with open(cfg_path, 'w') as f:
                 OmegaConf.save(config=self._cfg, f=f.name)
-            cfg_dict = OmegaConf.to_container(self._cfg, resolve=True)
 
-            flat_cfg = dict(eu.flatten_dict(cfg_dict))
-            # TODO: uncomment when logger is defined
-            # if isinstance(logger.experiment.config, wandb.sdk.wandb_config.Config):
-            #     logger.experiment.config.update(flat_cfg)
+            # Log config to wandb
+            if logger is not None:
+                cfg_dict = OmegaConf.to_container(self._cfg, resolve=True)
+                flat_cfg = dict(eu.flatten_dict(cfg_dict))
+                if isinstance(logger.experiment.config, wandb.sdk.wandb_config.Config):
+                    logger.experiment.config.update(flat_cfg)
 
         devices = GPUtil.getAvailable(order='memory', limit = 8)[:self._exp_cfg.num_devices]
         log.info(f"Using devices: {devices}")
@@ -71,7 +78,7 @@ class Experiment:
             **self._exp_cfg.trainer,
             callbacks=callbacks,
             logger=logger,
-            use_distributed_sampler=False,
+            use_distributed_sampler=True,
             enable_progress_bar=True,
             enable_model_summary=True,
             devices=devices,
@@ -82,7 +89,7 @@ class Experiment:
             datamodule=self._datamodule,
         )
 
-@hydra.main(version_base=None, config_path="./configs", config_name="train")
+@hydra.main(version_base=None, config_path="./configs", config_name="train_afdb")
 def main(cfg: DictConfig):
 
     exp = Experiment(cfg=cfg)

@@ -3,19 +3,19 @@ from torch.utils.data import DataLoader
 from torch.utils.data import Dataset
 from omegaconf import OmegaConf
 
-from immunofoundation.data.components.ImmunoDataset import ImmunoDataset
-from immunofoundation.data.components.ImmunoDataset import custom_collate
-from immunofoundation.models.ImmunoFoundationModule import ImmunoFoundationModule
+from immunofoundation.data.components.ImmunoMultimerDataset import ImmunoMultimerDataset
+from immunofoundation.data.components.ImmunoMultimerDataset import custom_collate
+from immunofoundation.models.ImmunoFoundationMultimerModule import ImmunoFoundationMultimerModule
 
 
 
 def main():
-    cfg = OmegaConf.load("configs/train.yaml")
+    cfg = OmegaConf.load("configs/train_cancer.yaml")
     data_cfg = cfg.data
     model_cfg = cfg.model
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    train_data = ImmunoDataset(
+    train_data = ImmunoMultimerDataset(
         data_cfg,
         is_training=True,
     )
@@ -29,9 +29,9 @@ def main():
             collate_fn=custom_collate
         )
     batch = next(iter(train_loader))
-    model = ImmunoFoundationModule(model_cfg)
-    print("Initialized ImmunoFoundationModel model!!")
-    peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings = model(batch)
+    model = ImmunoFoundationMultimerModule(model_cfg)
+    print("Initialized ImmunoFoundationMultimerModule model!!")
+    peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings = model.encode(batch)
     print(f"peptide_seq_embeddings: {peptide_seq_embeddings.shape}")
     print(f"mhc_seq_embeddings: {mhc_seq_embeddings.shape}")
     print(f"peptide_struct_embeddings: {peptide_struct_embeddings.shape}")

@@ -1,9 +1,18 @@
 from Bio.PDB import PDBParser, MMCIFParser
 from Bio.SeqUtils import seq1
+import gzip
+import numpy as np
+
+parser = MMCIFParser(QUIET=True)
+    
 
 def extract_ca_and_sequence(pdb_file):
     parser = MMCIFParser(QUIET=True)
-    structure = parser.get_structure('protein', pdb_file)
+    if pdb_file.endswith(".gz"):
+        with gzip.open(pdb_file, 'rt') as f:
+            structure = parser.get_structure('protein', f)
+    else:
+        structure = parser.get_structure('protein', pdb_file)
     model = structure[0]
     
     ca_coords_peptide = []
@@ -39,5 +48,11 @@ def extract_ca_and_sequence(pdb_file):
     
     sequence_peptide = ''.join(sequence_peptide)
     sequence_mhc = ''.join(sequence_mhc)
-    
+
     return ca_coords_peptide, sequence_peptide, ca_coords_mhc, sequence_mhc
+
+
+def normalize_coords(coords):
+    """Normalize coordinates to [-1, 1]."""
+    coords = np.array(coords)
+    return 2 * (coords - coords.min()) / (coords.max() - coords.min()) - 1

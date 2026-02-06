@@ -1,8 +1,6 @@
 import torch
 import torch.nn as nn
 
-
-
 class StructureModel(nn.Module):
     def __init__(self, struc_cfg):
         super().__init__()
@@ -13,7 +11,14 @@ class StructureModel(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.cfg.n_layers)
 
-    def forward(self, peptide_adj, mhc_adj, peptide_coords, mhc_coords):
-        projected_peptide_coords = self.projection(peptide_coords)
-        projected_mhc_coords = self.projection(mhc_coords)
-        return self.encoder(projected_peptide_coords), self.encoder(projected_mhc_coords)
+    def forward(self, adj, coords):
+        coords = self.projection(coords)
+        if adj.dim() == 3:
+            batch_size, seq_len, _ = adj.shape
+            eye = torch.eye(seq_len, device=adj.device, dtype=adj.dtype).unsqueeze(0)
+            adj = torch.clamp(adj + eye, max=1)
+            attn_mask = torch.zeros_like(adj, dtype=coords.dtype)
+            attn_mask = attn_mask.masked_fill(adj == 0, float('-inf'))
+            attn_mask = attn_mask.repeat_interleave(self.cfg.n_heads, dim=0)
+            return self.encoder(coords, mask=attn_mask)
+        return self.encoder(coords)

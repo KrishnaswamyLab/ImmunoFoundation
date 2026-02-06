@@ -1,8 +1,8 @@
 
 
 data:
-  batch_size: 128
-  max_batch_size: 128
+  batch_size: 32
+  max_batch_size: 32
   num_workers: 0
   train_size: 0.8
   mono: true
@@ -28,7 +28,7 @@ model:
     out_dim: 32
     n_heads: 8
     dim_ffn: 256
-    n_layers: 4
+    n_layers: 10
   structure:
     model_type: transformer
     out_dim: 32
@@ -48,7 +48,7 @@ optimizer:
 
 experiment:
   debug: False
-  num_devices: 1
+  num_devices: 2
 
   wandb:
     name: "afdb_phase_1"
@@ -76,4 +76,4 @@ experiment:
     save_top_k: 3
     monitor: val/total_loss
     mode: min
-    every_n_epochs: 40
+    every_n_epochs: 2

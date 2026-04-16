@@ -1,0 +1,12 @@
+# Example finetuning config for ImmunoFoundation classifier
+# Update the values as needed for your experiment
+
+csv: /home/am3826/scratch_pi_sk2433/am3826/finetuning/merged.csv
+out_dir: /home/am3826/scratch_pi_sk2433/am3826/finetuning/run_af2_full
+max_epochs: 50
+batch_size: 8
+num_workers: 8
+matmul_precision: medium
+bio_dim: 32
+hidden_dims: [512, 256, 128, 64, 32]
+class_weights: [0.61755624, 2.62664165]

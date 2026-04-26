@@ -7,7 +7,6 @@ from torch.utils.data import Dataset
 import torch.nn.functional as F
 
 from immunofoundation.data.components.preprocess_pdb import extract_ca_and_sequence, normalize_coords
-from immunofoundation.data.components.preprocess import extract_biochemical_properties
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -38,14 +37,12 @@ class ImmunoMultimerDataset(Dataset):
             returns: final_features: Dict containing all the information necessary for the model to train
         '''
         raw_coords_peptide, sequence_peptide, raw_coords_mhc, sequence_mhc = extract_ca_and_sequence(csv_row['cif_path'])
-        biochemical_properties = extract_biochemical_properties(csv_row)
 
         final_features = {}
         final_features['peptide_len'] = len(sequence_peptide)
         final_features['mhc_len'] = len(sequence_mhc)
         final_features['peptide_sequence'] = sequence_peptide
         final_features['mhc_sequence'] = sequence_mhc
-        final_features['biochemical_properties'] = torch.from_numpy(biochemical_properties)
 
         # Compute masks on raw Angstrom coordinates before normalization
         raw_pep_tensor = torch.tensor(raw_coords_peptide).float()
@@ -136,10 +133,10 @@ def pad_square(x, max_len, use_torch=False, reverse=False):
         pad_spec = ((0, pad_h), (0, pad_w))
 
     if use_torch:
-        # torch.pad uses reversed order: (left, right, top, bottom)
-        # For 2D tensor, flatten spec accordingly:
         pad = (pad_spec[1][0], pad_spec[1][1], pad_spec[0][0], pad_spec[0][1])
-        return torch.nn.functional.pad(x, pad)
+        if hasattr(x, 'toarray'):
+            x = x.toarray()
+        return torch.nn.functional.pad(torch.tensor(x), pad)
     else:
         return np.pad(x, pad_spec)
 def custom_collate_multi(batch_list):
@@ -149,27 +146,24 @@ def custom_collate_multi(batch_list):
     - MHC coords [N_mhc_res, 3]
     """
     max_len_peptide = max([x['peptide_len'] for x in batch_list])
-    # max_len_peptide = max(list(map(lambda len(x['peptide_len']) : x, batch_list)))
+    max_len_mhc = max([x['mhc_len'] for x in batch_list])
     padded_peptide_ca_coords = torch.utils.data.default_collate([pad(rec['peptide_coords'], max_len=max_len_peptide) for rec in batch_list])
-    mhc_ca_coords = torch.utils.data.default_collate([rec['mhc_coords'] for rec in batch_list])
+    padded_mhc_ca_coords = torch.utils.data.default_collate([pad(rec['mhc_coords'], max_len=max_len_mhc) for rec in batch_list])
     if batch_list[0]['peptide_adj'] is not None:
-        peptide_adjs = torch.utils.data.default_collate([pad_square(rec['peptide_adj'], max_len=max_len_peptide) for rec in batch_list])
-        mhc_adjs = torch.utils.data.default_collate([pad_square(rec['mhc_adj'], max_len=max_len_peptide) for rec in batch_list])
+        peptide_adjs = torch.utils.data.default_collate([pad_square(rec['peptide_adj'], max_len=max_len_peptide, use_torch=True) for rec in batch_list])
+        mhc_adjs = torch.utils.data.default_collate([pad_square(rec['mhc_adj'], max_len=max_len_mhc, use_torch=True) for rec in batch_list])
     else:
         peptide_adjs = torch.utils.data.default_collate([0]*len(batch_list))
         mhc_adjs = torch.utils.data.default_collate([0]*len(batch_list))
-    biochemical_properties = torch.utils.data.default_collate([torch.tensor(rec['biochemical_properties']).float() for rec in batch_list])
-    peptide_masks = torch.utils.data.default_collate([torch.tensor(rec['peptide_mask']).float() for rec in batch_list])
-    mhc_masks = torch.utils.data.default_collate([torch.tensor(rec['mhc_mask']).float() for rec in batch_list])
+    peptide_masks = torch.utils.data.default_collate([pad(torch.tensor(rec['peptide_mask']).float(), max_len_peptide) for rec in batch_list])
+    mhc_masks = torch.utils.data.default_collate([pad(torch.tensor(rec['mhc_mask']).float(), max_len_mhc) for rec in batch_list])
     mhc_sequences = torch.utils.data.default_collate([rec['mhc_sequence'] for rec in batch_list])
     peptide_sequences = torch.utils.data.default_collate([rec['peptide_sequence'] for rec in batch_list])
-    # TODO: include integer amino acid indices
     return {
-        "mhc_coords": mhc_ca_coords,
+        "mhc_coords": padded_mhc_ca_coords,
         "peptide_coords": padded_peptide_ca_coords,
         "peptide_adjs": peptide_adjs,
         "mhc_adjs": mhc_adjs,
-        "biochemical_properties": biochemical_properties,
         "mhc_sequence": mhc_sequences,
         "peptide_sequence": peptide_sequences,
         "mhc_masks": mhc_masks,

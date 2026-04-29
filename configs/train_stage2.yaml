@@ -1,7 +1,7 @@
 
 data:
-  batch_size: 2
-  max_batch_size: 2
+  batch_size: 32
+  max_batch_size: 32
   num_workers: 0
   train_size: 0.8
   mono: false

@@ -10,6 +10,7 @@
 #SBATCH --mem=100G
 #SBATCH --output=./logs/slurm/stage_2_pretraining/afdb/%x_%j.out
 #SBATCH --error=./logs/slurm/stage_2_pretraining/afdb/%x_%j.err
+#SBATCH --mail-user=joaofelipe.rocha@yale.edu
 #SBATCH --mail-type=REQUEUE,FAIL,TIME_LIMIT
 
 
@@ -28,4 +29,5 @@ export NCCL_SOCKET_IFNAME=lo
 export NCCL_DEBUG=INFO
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 
-python train.py --config-name train_stage2
+
+torchrun --nproc_per_node=4 --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT train.py --config-name train_stage2

@@ -111,13 +111,15 @@ class ImmunoFoundationMultimerModule(LightningModule):
         return masked_peptide_seq_embeddings, masked_mhc_seq_embeddings, masked_peptide_coords, masked_mhc_coords
     
     def mae_loss(self, x, x_hat, mask):
-        masked = mask.bool()
-        per_token_mse = (x_hat - x).pow(2).mean(dim=-1) * masked / masked.sum().clamp_min(1)
-        return per_token_mse
+        mse_per_token = F.mse_loss(x_hat, x, reduction='none').mean(dim=-1)
+        mask = mask.float()
+        mask_count = mask.sum(dim=-1).clamp(min=1)
+        per_sample_loss = (mse_per_token * mask).sum(dim=-1) / mask_count
+        return per_sample_loss
     
     def mlm_loss(self, logits, true):
         loss_per_token = self.mlm_criterion(logits.view(-1, logits.size(-1)), true.view(-1))
-        return loss_per_token.view(logits.size(0), logits.size(1)).sum(1)
+        return loss_per_token.view(logits.size(0), logits.size(1)).mean(1)
 
     def build_decoder(self, input_dim, hidden_dim, output_dim):
         return nn.Sequential(

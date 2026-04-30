@@ -26,10 +26,12 @@ class FinetuneClassifierModule(LightningModule):
             raise ValueError('Backbone must have sequence.out_dim and structure.out_dim in its model_cfg')
 
         in_dim = int(seq_dim) + int(struct_dim) + int(bio_dim)
+
         # default to a simple 5-layer MLP if not provided
         if hidden_dims is None:
             hidden_dims = [512, 256, 128, 64, 32]
         layers = []
+
         prev = in_dim
         for h in hidden_dims:
             layers.append(nn.Linear(prev, h))
@@ -47,9 +49,9 @@ class FinetuneClassifierModule(LightningModule):
             self.criterion = nn.CrossEntropyLoss()
 
     def forward(self, batch):
-        # Expect batch to be in the same format used by ImmunoMonomerDataset/custom_collate_mono
         # backbone.encode returns seq_embeddings, struct_embeddings
         seq_embeddings, struct_embeddings = self.backbone.encode(batch)
+
         # pooling: masked mean over residues if masks present
         if 'masks' in batch:
             mask = batch['masks'].unsqueeze(-1)  # (B, L, 1)
@@ -64,19 +66,18 @@ class FinetuneClassifierModule(LightningModule):
         if bio is None:
             # pad with zeros to match expected bio_dim
             if self.bio_dim > 0:
+                print("[WARNING] bio_dim > 0 but 'biochem' features not found in batch. Padding with zeros.")
                 bio = torch.zeros(seq_pool.size(0), self.bio_dim, dtype=torch.float32, device=seq_pool.device)
             else:
                 bio = None
 
-        if bio is None:
-            x = torch.cat([seq_pool, struct_pool], dim=-1)
-        else:
-            # ensure bio is float tensor and on correct device
-            if not torch.is_tensor(bio):
-                bio = torch.tensor(bio, dtype=torch.float32, device=seq_pool.device)
+            # Classifier input: [pooled, bio] if bio_dim > 0 and bio present in batch
+            if self.bio_dim > 0 and batch.get('bio') is not None:
+                print("[WARNING] bio_dim > 0 but 'biochem' features not found in batch. Using 'bio' features instead.")
+                bio = batch['bio']
+                x = torch.cat([seq_pool, struct_pool, bio], dim=-1)
             else:
-                bio = bio.to(seq_pool.device).float()
-            x = torch.cat([seq_pool, struct_pool, bio], dim=-1)
+                x = torch.cat([seq_pool, struct_pool], dim=-1)
 
         # Save for debug printing in training/validation step
         self._last_classifier_input = x.detach().cpu() if not hasattr(self, '_last_classifier_input') else x.detach().cpu()
@@ -96,11 +97,13 @@ class FinetuneClassifierModule(LightningModule):
         loss = self.criterion(logits, labels)
         preds = logits.argmax(dim=-1)
         acc = (preds == labels).float().mean()
+
         # # Debug print for first batch of each epoch
         # if batch_idx == 0:
         #     print("[DEBUG][TRAIN] Classifier input (first batch):", self._last_classifier_input[:5])
         #     print("[DEBUG][TRAIN] Predictions:", preds[:10].detach().cpu().numpy())
         #     print("[DEBUG][TRAIN] Labels:", labels[:10].detach().cpu().numpy())
+        
         self.log('train/loss', loss, on_step=True, on_epoch=True, prog_bar=False)
         self.log('train/acc', acc, on_step=True, on_epoch=True, prog_bar=False)
         return loss
@@ -122,11 +125,13 @@ class FinetuneClassifierModule(LightningModule):
         loss = self.criterion(logits, labels)
         preds = logits.argmax(dim=-1)
         acc = (preds == labels).float().mean()
-        # Debug print for first batch of each epoch
-        if batch_idx == 0:
-            print("[DEBUG][VAL] Classifier input (first batch):", self._last_classifier_input[:5])
-            print("[DEBUG][VAL] Predictions:", preds[:10].detach().cpu().numpy())
-            print("[DEBUG][VAL] Labels:", labels[:10].detach().cpu().numpy())
+
+        # # Debug print for first batch of each epoch
+        # if batch_idx == 0:
+        #     print("[DEBUG][VAL] Classifier input (first batch):", self._last_classifier_input[:5])
+        #     print("[DEBUG][VAL] Predictions:", preds[:10].detach().cpu().numpy())
+        #     print("[DEBUG][VAL] Labels:", labels[:10].detach().cpu().numpy())
+        
         self.log('val/loss', loss, on_epoch=True)
         self.log('val/acc', acc, on_epoch=True)
         return loss

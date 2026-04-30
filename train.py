@@ -53,6 +53,18 @@ class Experiment:
         else:
             self._model = backbone
 
+        # Load checkpoint if specified
+        init_ckpt = cfg.get("init_checkpoint", None)
+        if init_ckpt:
+            ckpt = torch.load(init_ckpt, map_location="cpu")
+            # TODO: strict=False is required for cross-module transfer (e.g. monomer 92 multimer)
+            # because the multimer module has keys absent from the monomer checkpoint (bio_model,
+            # biochem_decoder). For same-module continuation strict=True would be safer.
+            missing, unexpected = self._model.load_state_dict(ckpt["state_dict"], strict=False)
+            log.info(f"Loaded weights from checkpoint: {init_ckpt}")
+            log.info(f"  Missing (randomly initialized): {missing}")
+            log.info(f"  Unexpected (ignored): {unexpected}")
+
         self._datamodule = ImmunoDataModule(self._cfg.data)
  
     def train(self):
@@ -88,8 +100,9 @@ class Experiment:
                 if isinstance(logger.experiment.config, wandb.sdk.wandb_config.Config):
                     logger.experiment.config.update(flat_cfg)
 
-        devices = GPUtil.getAvailable(order='memory', limit = 8)[:self._exp_cfg.num_devices]
-        log.info(f"Using devices: {devices}")
+        num_gpus = torch.cuda.device_count()
+        devices = min(num_gpus, self._exp_cfg.num_devices)
+        log.info(f"Using {devices} device(s) out of {num_gpus} visible")
         
         trainer = Trainer(
             **self._exp_cfg.trainer,

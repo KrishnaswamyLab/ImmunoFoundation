@@ -15,16 +15,12 @@ import torch.nn.functional as F
 from immunofoundation.models.components.ESM import ESM
 from immunofoundation.models.components.SequenceModel import SequenceModel
 from immunofoundation.models.components.StructureModel import StructureModel
-from immunofoundation.models.components.BiochemicalModel import BiochemicalModel
 
 SEQUENCE_MODELS = {
     "esm": ESM,
 }
 STRUCTURE_MODELS = {
     "transformer": StructureModel,
-}
-BIOCHEM_MODELS = {
-    "mlp": BiochemicalModel,
 }
 
 class ImmunoFoundationMultimerModule(LightningModule):
@@ -35,17 +31,28 @@ class ImmunoFoundationMultimerModule(LightningModule):
         self.aa_embedding_model = SEQUENCE_MODELS.get(model_cfg.sequence.model_type, 'esm')(model_cfg.sequence)
         self.sequence_model = SequenceModel(model_cfg.sequence)
         self.structure_model = STRUCTURE_MODELS.get(model_cfg.structure.model_type, 'transformer')(model_cfg.structure)
-        self.bio_model = BIOCHEM_MODELS.get(model_cfg.bio_chem.model_type, 'mlp')(model_cfg.bio_chem)
         self.mlm_decoder = nn.Linear(model_cfg.sequence.out_dim, 20)
         self.sequence_decoder = self.build_decoder(model_cfg.sequence.out_dim, model_cfg.sequence.out_dim*2, model_cfg.sequence.esm_dim)
         self.structure_decoder = self.build_decoder(model_cfg.structure.out_dim, int(model_cfg.structure.out_dim//2), 3)
-        self.biochem_decoder = self.build_decoder(model_cfg.bio_chem.out_dim, model_cfg.bio_chem.out_dim*2, model_cfg.bio_chem.n_bio_prop)
         self.mlm_criterion = nn.CrossEntropyLoss(reduction='none')
 
     def training_step(self, batch, stage):
         per_sample_losses = self.model_step(batch)
-        total_losses = {k: v.mean() for k,v in per_sample_losses.items()}
-        return sum(total_losses.values())
+        total_losses = {k: v.mean() for k, v in per_sample_losses.items()}
+        for loss_name, loss_value in total_losses.items():
+            self.log(f"train/{loss_name}", loss_value, on_step=True, on_epoch=True, prog_bar=False, sync_dist=True)
+        total_loss = sum(total_losses.values())
+        self.log("train/total_loss", total_loss, on_step=True, on_epoch=True, prog_bar=True, sync_dist=True)
+        return total_loss
+
+    def validation_step(self, batch, batch_idx):
+        per_sample_losses = self.model_step(batch)
+        total_losses = {k: v.mean() for k, v in per_sample_losses.items()}
+        for loss_name, loss_value in total_losses.items():
+            self.log(f"val/{loss_name}", loss_value, on_step=False, on_epoch=True, prog_bar=False, sync_dist=True)
+        total_loss = sum(total_losses.values())
+        self.log("val/total_loss", total_loss, on_step=False, on_epoch=True, prog_bar=True, sync_dist=True)
+        return total_loss
         
     def model_step(self, batch):
         with torch.no_grad():
@@ -57,13 +64,10 @@ class ImmunoFoundationMultimerModule(LightningModule):
         mhc_seq_embeddings_with_mask = self.sequence_model(masked_mhc_seq_embeddings)
         peptide_struct_embeddings = self.structure_model(batch['peptide_adjs'], masked_peptide_coords)
         mhc_struct_embeddings = self.structure_model(batch['mhc_adjs'], masked_mhc_coords)
-        bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
-
         recon_peptide_seq_embeddings = self.sequence_decoder(peptide_seq_embeddings_with_mask)
         recon_mhc_seq_embeddings = self.sequence_decoder(mhc_seq_embeddings_with_mask)
         recon_peptide_sturct_embeddings = self.structure_decoder(peptide_struct_embeddings)
         recon_mhc_sturct_embeddings = self.structure_decoder(mhc_struct_embeddings)
-        recon_bio_chem = self.biochem_decoder(bio_chem_embeddings)
 
         predicted_peptides_residues = self.mlm_decoder(peptide_seq_embeddings_with_mask)
         predicted_mhc_residues = self.mlm_decoder(mhc_seq_embeddings_with_mask)
@@ -73,7 +77,6 @@ class ImmunoFoundationMultimerModule(LightningModule):
         per_sample_losses['recon_loss_mhc_seq'] = self.mae_loss(mhc_seq_embeddings, recon_mhc_seq_embeddings, batch['mhc_masks'])
         per_sample_losses['recon_loss_peptide_struct'] = self.mae_loss(batch['peptide_coords'], recon_peptide_sturct_embeddings, batch['peptide_masks'])
         per_sample_losses['recon_loss_mhc_struct'] = self.mae_loss(batch['mhc_coords'], recon_mhc_sturct_embeddings, batch['mhc_masks'])
-        per_sample_losses['recon_loss_bio_chem'] = (recon_bio_chem - batch['biochemical_properties']).pow(2).mean(1)
         per_sample_losses['mlm_loss_peptides'] = self.mlm_loss(predicted_peptides_residues, peptide_tokens)
         per_sample_losses['mlm_loss_mhc'] = self.mlm_loss(predicted_mhc_residues, mhc_tokens)
         return per_sample_losses
@@ -85,8 +88,7 @@ class ImmunoFoundationMultimerModule(LightningModule):
         mhc_seq_embeddings = self.sequence_model(mhc_seq_embeddings)
         peptide_struct_embeddings = self.structure_model(batch['peptide_adjs'], batch['peptide_coords'])
         mhc_struct_embeddings = self.structure_model(batch['mhc_adjs'], batch['mhc_coords'])
-        bio_chem_embeddings = self.bio_model(batch['biochemical_properties'])
-        return peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings, bio_chem_embeddings
+        return peptide_seq_embeddings, mhc_seq_embeddings, peptide_struct_embeddings, mhc_struct_embeddings
 
     def configure_optimizers(self):
         # Use optimizer config if provided in model_cfg, otherwise default
@@ -109,13 +111,15 @@ class ImmunoFoundationMultimerModule(LightningModule):
         return masked_peptide_seq_embeddings, masked_mhc_seq_embeddings, masked_peptide_coords, masked_mhc_coords
     
     def mae_loss(self, x, x_hat, mask):
-        masked = mask.bool()
-        per_token_mse = (x_hat - x).pow(2).mean(dim=-1) * masked / masked.sum().clamp_min(1)
-        return per_token_mse
+        mse_per_token = F.mse_loss(x_hat, x, reduction='none').mean(dim=-1)
+        mask = mask.float()
+        mask_count = mask.sum(dim=-1).clamp(min=1)
+        per_sample_loss = (mse_per_token * mask).sum(dim=-1) / mask_count
+        return per_sample_loss
     
     def mlm_loss(self, logits, true):
         loss_per_token = self.mlm_criterion(logits.view(-1, logits.size(-1)), true.view(-1))
-        return loss_per_token.view(logits.size(0), logits.size(1)).sum(1)
+        return loss_per_token.view(logits.size(0), logits.size(1)).mean(1)
 
     def build_decoder(self, input_dim, hidden_dim, output_dim):
         return nn.Sequential(

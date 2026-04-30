@@ -4,13 +4,8 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["immunofoundation*"]
-exclude = ["tests*"]
-
 dependencies = [
+    "gputil>=1.4.0",
     "biopython>=1.85",
     "fair-esm>=2.0.0",
     "gputil>=1.4.0",
@@ -18,3 +13,8 @@ dependencies = [
     "ipykernel>=7.1.0",
     "pandas>=2.3.3",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["immunofoundation*"]
+exclude = ["tests*"]

@@ -9,11 +9,6 @@ torchaudio
 pytorch-lightning
 torchmetrics
 torch_geometric
-torch_scatter
-torch_sparse
-torch_cluster
-torch_spline_conv
-timm
 
 # -- Project Specific --
 scikit-learn

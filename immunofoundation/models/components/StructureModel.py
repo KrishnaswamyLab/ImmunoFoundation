@@ -11,7 +11,7 @@ class StructureModel(nn.Module):
         )
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=self.cfg.n_layers)
 
-    def forward(self, adj, coords):
+    def forward(self, adj, coords, **kwargs):
         coords = self.projection(coords)
         if adj.dim() == 3:
             batch_size, seq_len, _ = adj.shape

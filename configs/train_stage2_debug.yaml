@@ -1,13 +1,12 @@
 
-
 data:
-  batch_size: 32
-  max_batch_size: 32
+  batch_size: 2
+  max_batch_size: 2
   num_workers: 0
-  train_size: 0.9
-  mono: true
+  train_size: 0.8
+  mono: false
   prefetch_factor: 100
-  csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata_monomer.csv
+  csv_path: data/dimer_filtered.csv
   mask:
     mask_rate: 0.5
     max_distance: 8
@@ -16,7 +15,7 @@ data:
     adj: true
     graph_type: knn
     k: 15
-
+    
 model:
   sequence:
     model_type: esm
@@ -35,23 +34,18 @@ model:
     n_heads: 8
     dim_ffn: 256
     n_layers: 4
-  bio_chem:
-    model_type: mlp
-    n_bio_prop: 93 # DO NOT CHANGE THIS
-    hidden_dim: 64
-    out_dim: 32
-    n_layers: 4
-  
+init_checkpoint: /nfs/roberts/project/pi_sk2433/shared/ImmunoFoundationCkpt/afdb_phase_1/last.ckpt   
+
 optimizer:
   lr: 1e-4
   weight_decay: 1e-6
 
 experiment:
-  debug: False
-  num_devices: 4
+  debug: True
+  num_devices: 1
 
   wandb:
-    name: "afdb_phase_1_final"
+    name: "afdb_phase_2_multimer"
     project: immunofoundation
     save_code: false
     tags: []
@@ -61,13 +55,14 @@ experiment:
     lr: 0.0001
 
   trainer:
+    fast_dev_run: true
     min_epochs: 1
     max_epochs: 200
     accelerator: gpu
     log_every_n_steps: 1
     deterministic: False
     strategy: ddp
-    check_val_every_n_epoch: 1
+    check_val_every_n_epoch: 2
     accumulate_grad_batches: 4
 
   checkpointer:
@@ -76,4 +71,4 @@ experiment:
     save_top_k: 3
     monitor: val/total_loss
     mode: min
-    every_n_epochs: 1
+    every_n_epochs: 2

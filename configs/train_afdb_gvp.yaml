@@ -1,11 +1,12 @@
 
 
 data:
-  batch_size: 32
-  max_batch_size: 32
+  batch_size: 64
+  max_batch_size: 64
   num_workers: 0
   train_size: 0.9
   mono: true
+  sparse_batching: true
   prefetch_factor: 100
   csv_path: /home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/data/metadata_monomer.csv
   mask:
@@ -30,32 +31,40 @@ model:
     dim_ffn: 256
     n_layers: 10
   structure:
-    model_type: transformer
+    model_type: unet_gvp
+    esm_dim: 1280
     out_dim: 32
-    n_heads: 8
-    dim_ffn: 256
-    n_layers: 4
+    s_dim: 128
+    v_dim: 16
+    s_dim_edge: 32
+    v_dim_edge: 1
+    r_max: 4.0
+    num_bessel: 8
+    num_polynomial_cutoff: 5
+    num_layers: 5
+    residual: true
+    k: 16
   bio_chem:
     model_type: mlp
     n_bio_prop: 93 # DO NOT CHANGE THIS
     hidden_dim: 64
     out_dim: 32
     n_layers: 4
-  
+
 optimizer:
   lr: 1e-4
   weight_decay: 1e-6
 
 experiment:
   debug: False
-  num_devices: 4
+  num_devices: 2
 
   wandb:
-    name: "afdb_phase_1_final"
+    name: "afdb_unet_gvp"
     project: immunofoundation
     save_code: false
     tags: []
-    mode: "online" # can also save to `offline`
+    mode: "online"
 
   optimizer:
     lr: 0.0001
@@ -66,8 +75,8 @@ experiment:
     accelerator: gpu
     log_every_n_steps: 1
     deterministic: False
-    strategy: ddp
-    check_val_every_n_epoch: 1
+    strategy: ddp_find_unused_parameters_true
+    check_val_every_n_epoch: 2
     accumulate_grad_batches: 4
 
   checkpointer:
@@ -76,4 +85,4 @@ experiment:
     save_top_k: 3
     monitor: val/total_loss
     mode: min
-    every_n_epochs: 1
+    every_n_epochs: 2

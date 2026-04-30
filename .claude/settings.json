@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//home/hm638/project_pi_sk2433/hm638/ImmunoFoundation/**)",
+      "Read(//nfs/roberts/project/pi_sk2433/hm638/ImmunoFoundation/**)"
+    ]
+  }
+}

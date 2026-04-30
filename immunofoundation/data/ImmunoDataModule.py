@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 from torch.utils.data import DataLoader
 from pytorch_lightning import LightningDataModule
 
-from immunofoundation.data.components.ImmunoMonomerDataset import ImmunoMonomerDataset, custom_collate_mono
+from immunofoundation.data.components.ImmunoMonomerDataset import ImmunoMonomerDataset, custom_collate_mono, custom_collate_mono_sparse
 from immunofoundation.data.components.ImmunoMultimerDataset import ImmunoMultimerDataset, custom_collate_multi
 
 class ImmunoDataModule(LightningDataModule):
@@ -16,7 +16,10 @@ class ImmunoDataModule(LightningDataModule):
         self.data_val = None
 
         if self.data_cfg.mono:
-            self.collate_fn = custom_collate_mono
+            if getattr(self.data_cfg, 'sparse_batching', False):
+                self.collate_fn = custom_collate_mono_sparse
+            else:
+                self.collate_fn = custom_collate_mono
         else:
             self.collate_fn = custom_collate_multi
 

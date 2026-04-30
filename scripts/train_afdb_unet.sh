@@ -5,7 +5,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --account=prio_sk2433
 #SBATCH --partition=priority_gpu
-#SBATCH --gpus=h200:4
+#SBATCH --gpus=h200:2
 #SBATCH --nodes=1
 #SBATCH --mem=100G
 #SBATCH --output=./logs/slurm/pretraining/afdb/%x_%j.out
@@ -22,10 +22,10 @@ hostname
 pwd
 
 export MASTER_ADDR=127.0.0.1
-export MASTER_PORT=29004
+export MASTER_PORT=29502
 export NCCL_IB_DISABLE=1  
 export NCCL_SOCKET_IFNAME=lo
 export NCCL_DEBUG=INFO
 export TORCH_DISTRIBUTED_DEBUG=DETAIL
 
-torchrun --nproc_per_node=4 --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT train.py
+torchrun --nproc_per_node=2 --master_addr=$MASTER_ADDR --master_port=$MASTER_PORT train.py --config-name=train_afdb_gvp

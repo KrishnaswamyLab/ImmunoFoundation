@@ -15,6 +15,7 @@ import torch.nn.functional as F
 from immunofoundation.models.components.ESM import ESM
 from immunofoundation.models.components.SequenceModel import SequenceModel
 from immunofoundation.models.components.StructureModel import StructureModel
+from immunofoundation.models.components.UNetGVP import UNetGVPStructureModel
 from immunofoundation.models.components.BiochemicalModel import BiochemicalModel
 
 SEQUENCE_MODELS = {
@@ -22,6 +23,7 @@ SEQUENCE_MODELS = {
 }
 STRUCTURE_MODELS = {
     "transformer": StructureModel,
+    "unet_gvp": UNetGVPStructureModel,
 }
 BIOCHEM_MODELS = {
     "mlp": BiochemicalModel,
@@ -71,7 +73,13 @@ class ImmunoFoundationMonomerModule(LightningModule):
             seq_embeddings, tokens = self.aa_embedding_model(batch['sequence'], True)
         masked_seq_embeddings, masked_coords = self.mask_residues(seq_embeddings, batch)
         seq_embeddings_with_mask = self.sequence_model(masked_seq_embeddings)
-        struct_embeddings = self.structure_model(batch['adjs'], masked_coords)
+        struct_embeddings = self.structure_model(
+            batch['adjs'], masked_coords,
+            node_features=masked_seq_embeddings,
+            edge_index=batch.get('edge_index'),
+            batch_vec=batch.get('batch_vec'),
+            node_counts=batch.get('node_counts'),
+        )
 
         recon_seq_embeddings = self.sequence_decoder(seq_embeddings_with_mask)
         recon_sturct_embeddings = self.structure_decoder(struct_embeddings)
@@ -86,7 +94,13 @@ class ImmunoFoundationMonomerModule(LightningModule):
     def encode(self, batch):
         seq_embeddings = self.aa_embedding_model(batch['sequence'])
         seq_embeddings = self.sequence_model(seq_embeddings)
-        struct_embeddings = self.structure_model(batch['adjs'], batch['coords'])
+        struct_embeddings = self.structure_model(
+            batch['adjs'], batch['coords'],
+            node_features=seq_embeddings,
+            edge_index=batch.get('edge_index'),
+            batch_vec=batch.get('batch_vec'),
+            node_counts=batch.get('node_counts'),
+        )
         return seq_embeddings, struct_embeddings
 
     def configure_optimizers(self):

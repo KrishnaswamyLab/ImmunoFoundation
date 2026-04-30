@@ -71,8 +71,9 @@ class Experiment:
                 if isinstance(logger.experiment.config, wandb.sdk.wandb_config.Config):
                     logger.experiment.config.update(flat_cfg)
 
-        devices = GPUtil.getAvailable(order='memory', limit = 8)[:self._exp_cfg.num_devices]
-        log.info(f"Using devices: {devices}")
+        num_gpus = torch.cuda.device_count()
+        devices = min(num_gpus, self._exp_cfg.num_devices)
+        log.info(f"Using {devices} device(s) out of {num_gpus} visible")
         
         trainer = Trainer(
             **self._exp_cfg.trainer,

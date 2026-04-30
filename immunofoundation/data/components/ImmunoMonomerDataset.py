@@ -151,3 +151,64 @@ def custom_collate_mono(batch_list):
         "sequence": sequences,
         "masks": masks,
     }
+
+def custom_collate_mono_sparse(batch_list):
+    """
+    Sparse batching collate: returns the same dense fields as custom_collate_mono
+    PLUS sparse PyG-style fields (edge_index, batch_vec, node_counts) for the
+    UNet GVP structure model.
+    """
+    # First, build all the dense fields exactly as custom_collate_mono does
+    max_len = max([x['len'] for x in batch_list])
+    padded_coords = torch.utils.data.default_collate([pad(rec['coords'], max_len=max_len) for rec in batch_list])
+    if batch_list[0]['adj'] is not None:
+        adjs = torch.utils.data.default_collate([pad_square(rec['adj'], max_len=max_len, use_torch=True) for rec in batch_list])
+    else:
+        adjs = torch.utils.data.default_collate([0]*len(batch_list))
+    masks = torch.utils.data.default_collate([pad(torch.tensor(rec['mask']).float(), max_len) for rec in batch_list])
+    sequences = torch.utils.data.default_collate([rec['sequence'] for rec in batch_list])
+
+    # Build sparse fields from per-sample adjacency matrices
+    all_edges = []
+    node_counts = []
+    offset = 0
+
+    for rec in batch_list:
+        n = rec['len']
+        node_counts.append(n)
+
+        adj = rec['adj']
+        if adj is not None:
+            # Convert scipy sparse to dense if needed
+            if hasattr(adj, 'toarray'):
+                adj_dense = torch.tensor(adj.toarray(), dtype=torch.float32)
+            else:
+                adj_dense = torch.tensor(adj, dtype=torch.float32) if not isinstance(adj, torch.Tensor) else adj
+
+            # Extract edge indices (local)
+            local_edges = adj_dense.nonzero(as_tuple=False).t()  # (2, n_edges)
+            # Offset to global node indices
+            all_edges.append(local_edges + offset)
+
+        offset += n
+
+    if all_edges:
+        edge_index = torch.cat(all_edges, dim=1).long()
+    else:
+        edge_index = torch.zeros(2, 0, dtype=torch.long)
+
+    batch_vec = torch.cat([
+        torch.full((nc,), i, dtype=torch.long)
+        for i, nc in enumerate(node_counts)
+    ])
+    node_counts_tensor = torch.tensor(node_counts, dtype=torch.long)
+
+    return {
+        "coords": padded_coords,
+        "adjs": adjs,
+        "sequence": sequences,
+        "masks": masks,
+        "edge_index": edge_index,
+        "batch_vec": batch_vec,
+        "node_counts": node_counts_tensor,
+    }

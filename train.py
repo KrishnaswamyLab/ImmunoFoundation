@@ -36,6 +36,18 @@ class Experiment:
             self._model = ImmunoFoundationMonomerModule(self._cfg.model)
         else:
             self._model = ImmunoFoundationMultimerModule(self._cfg.model)
+
+        init_ckpt = cfg.get("init_checkpoint", None)
+        if init_ckpt:
+            ckpt = torch.load(init_ckpt, map_location="cpu")
+            # TODO: strict=False is required for cross-module transfer (e.g. monomer → multimer)
+            # because the multimer module has keys absent from the monomer checkpoint (bio_model,
+            # biochem_decoder). For same-module continuation strict=True would be safer.
+            missing, unexpected = self._model.load_state_dict(ckpt["state_dict"], strict=False)
+            log.info(f"Loaded weights from checkpoint: {init_ckpt}")
+            log.info(f"  Missing (randomly initialized): {missing}")
+            log.info(f"  Unexpected (ignored): {unexpected}")
+
         self._datamodule = ImmunoDataModule(self._cfg.data)
  
     def train(self):

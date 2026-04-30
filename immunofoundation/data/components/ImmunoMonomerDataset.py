@@ -22,15 +22,20 @@ class ImmunoMonomerDataset(Dataset):
     def _init_metadata(self):
         pdb_csv = pd.read_csv(self.data_cfg.csv_path)
         self.raw_csv = pdb_csv
-        train_len = int(pdb_csv.shape[0]*self.data_cfg.train_size)-1
-        if self.is_training:
-            pdb_csv = pdb_csv.iloc[:train_len, :]
+        n = pdb_csv.shape[0]
+        train_size = float(getattr(self.data_cfg, 'train_size', 1.0))
+        if train_size >= 1.0 or train_size <= 0.0:
+            # Use all data for both train and val if train_size is 1.0 or 0.0
             self.csv = pdb_csv
-            print (f"Training: {len(self.csv)} samples")
+            print(f"Using all {len(self.csv)} samples (no split)")
         else:
-            pdb_csv = pdb_csv.iloc[train_len:, :]
-            self.csv = pdb_csv
-            print (f"Validation: {len(self.csv)} samples")
+            train_len = int(n * train_size)
+            if self.is_training:
+                self.csv = pdb_csv.iloc[:train_len, :]
+                print(f"Training: {len(self.csv)} samples")
+            else:
+                self.csv = pdb_csv.iloc[train_len:, :]
+                print(f"Validation: {len(self.csv)} samples")
 
     def _process_csv_row(self, csv_row):
         '''

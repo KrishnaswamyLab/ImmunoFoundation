@@ -115,3 +115,4 @@ data_old/
 scripts/
 .claude/
 *.sh
+configs

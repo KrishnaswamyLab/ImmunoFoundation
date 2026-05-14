@@ -113,4 +113,5 @@ temp/
 data/*
 data_old/
 scripts/
-.claude
+.claude/
+*.sh

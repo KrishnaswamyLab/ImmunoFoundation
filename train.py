@@ -32,15 +32,32 @@ class Experiment:
         self._cfg = cfg
         self._data_cfg = cfg.data
         self._exp_cfg = cfg.experiment
+        # Build backbone (monomer or multimer)
         if self._data_cfg.mono:
-            self._model = ImmunoFoundationMonomerModule(self._cfg.model)
+            backbone = ImmunoFoundationMonomerModule(self._cfg.model)
         else:
-            self._model = ImmunoFoundationMultimerModule(self._cfg.model)
+            backbone = ImmunoFoundationMultimerModule(self._cfg.model)
 
+        # If classifier module specified in config, wrap backbone with FinetuneClassifierModule
+        classifier_cfg = getattr(self._cfg.model, 'classifier', None)
+        if classifier_cfg is not None and getattr(classifier_cfg, 'module', None) == 'FinetuneClassifierModule':
+            from immunofoundation.models.FinetuneClassifierModule import FinetuneClassifierModule
+            self._model = FinetuneClassifierModule(
+                backbone=backbone,
+                num_classes=getattr(classifier_cfg, 'num_classes', 2),
+                bio_dim=getattr(classifier_cfg, 'bio_dim', 0),
+                hidden_dims=getattr(classifier_cfg, 'hidden_dims', [512, 256, 128, 64, 32]),
+                lr=getattr(classifier_cfg, 'lr', 1e-4),
+                class_weights=getattr(classifier_cfg, 'class_weights', None)
+            )
+        else:
+            self._model = backbone
+
+        # Load checkpoint if specified
         init_ckpt = cfg.get("init_checkpoint", None)
         if init_ckpt:
             ckpt = torch.load(init_ckpt, map_location="cpu")
-            # TODO: strict=False is required for cross-module transfer (e.g. monomer → multimer)
+            # TODO: strict=False is required for cross-module transfer (e.g. monomer 92 multimer)
             # because the multimer module has keys absent from the monomer checkpoint (bio_model,
             # biochem_decoder). For same-module continuation strict=True would be safer.
             missing, unexpected = self._model.load_state_dict(ckpt["state_dict"], strict=False)

@@ -22,15 +22,20 @@ class ImmunoMonomerDataset(Dataset):
     def _init_metadata(self):
         pdb_csv = pd.read_csv(self.data_cfg.csv_path)
         self.raw_csv = pdb_csv
-        train_len = int(pdb_csv.shape[0]*self.data_cfg.train_size)-1
-        if self.is_training:
-            pdb_csv = pdb_csv.iloc[:train_len, :]
+        n = pdb_csv.shape[0]
+        train_size = float(getattr(self.data_cfg, 'train_size', 1.0))
+        if train_size >= 1.0 or train_size <= 0.0:
+            # Use all data for both train and val if train_size is 1.0 or 0.0
             self.csv = pdb_csv
-            print (f"Training: {len(self.csv)} samples")
+            print(f"Using all {len(self.csv)} samples (no split)")
         else:
-            pdb_csv = pdb_csv.iloc[train_len:, :]
-            self.csv = pdb_csv
-            print (f"Validation: {len(self.csv)} samples")
+            train_len = int(n * train_size)
+            if self.is_training:
+                self.csv = pdb_csv.iloc[:train_len, :]
+                print(f"Training: {len(self.csv)} samples")
+            else:
+                self.csv = pdb_csv.iloc[train_len:, :]
+                print(f"Validation: {len(self.csv)} samples")
 
     def _process_csv_row(self, csv_row):
         '''
@@ -54,6 +59,17 @@ class ImmunoMonomerDataset(Dataset):
             final_features['adj'] = kneighbors_graph(coords, n_neighbors = self.data_cfg.structure.k)
         else:
             final_features['adj'] = None
+        # include label if present in CSV (optional for supervised finetuning)
+        # default label column name expected: 'immunogenicity'
+        if 'immunogenicity' in csv_row.index:
+            try:
+                final_features['label'] = int(csv_row['immunogenicity'])
+            except Exception:
+                # try mapping non-integer labels to 0/1
+                if str(csv_row['immunogenicity']).lower() in ('true', '1', 'yes'):
+                    final_features['label'] = 1
+                else:
+                    final_features['label'] = 0
         return final_features
 
     def __getitem__(self, idx):
@@ -143,14 +159,24 @@ def custom_collate_mono(batch_list):
     else:
         adjs = torch.utils.data.default_collate([0]*len(batch_list))
     masks = torch.utils.data.default_collate([pad(torch.tensor(rec['mask']).float(), max_len) for rec in batch_list])
-    sequences = torch.utils.data.default_collate([rec['sequence'] for rec in batch_list])
+    # keep sequences as python list so ESM wrapper can batch-convert them
+    sequences = [rec['sequence'] for rec in batch_list]
 
-    return {
+    batch = {
         "coords": padded_coords,
         "adjs": adjs,
         "sequence": sequences,
         "masks": masks,
     }
+    # optional fields: label and biochem
+    if 'label' in batch_list[0]:
+        labels = torch.tensor([rec['label'] for rec in batch_list], dtype=torch.long)
+        batch['label'] = labels
+    if 'biochem' in batch_list[0]:
+        biochems = torch.utils.data.default_collate([rec['biochem'] for rec in batch_list])
+        batch['biochem'] = biochems
+
+    return batch
 
 def custom_collate_mono_sparse(batch_list):
     """

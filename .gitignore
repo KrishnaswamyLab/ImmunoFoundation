@@ -112,7 +112,4 @@ temp/
 #Data
 data/*
 data_old/
-scripts/
 .claude/
-*.sh
-configs

@@ -52,6 +52,33 @@ def extract_ca_and_sequence(pdb_file):
     return ca_coords_peptide, sequence_peptide, ca_coords_mhc, sequence_mhc
 
 
+def extract_ca_and_sequence_pmhc(pdb_file, peptide_chain='P', mhc_chain='A'):
+    is_pdb = pdb_file.endswith(".pdb") or pdb_file.endswith(".pdb.gz")
+    parser = PDBParser(QUIET=True) if is_pdb else MMCIFParser(QUIET=True)
+    if pdb_file.endswith(".gz"):
+        with gzip.open(pdb_file, 'rt') as f:
+            structure = parser.get_structure('protein', f)
+    else:
+        structure = parser.get_structure('protein', pdb_file)
+    model = structure[0]
+
+    def _read_chain(chain_id):
+        coords, seq = [], []
+        if chain_id in model:
+            for residue in model[chain_id]:
+                if 'CA' in residue:
+                    coords.append(tuple(residue['CA'].get_coord()))
+                    try:
+                        seq.append(seq1(residue.get_resname()))
+                    except KeyError:
+                        seq.append('X')
+        return coords, ''.join(seq)
+
+    pep_coords, pep_seq = _read_chain(peptide_chain)
+    mhc_coords, mhc_seq = _read_chain(mhc_chain)
+    return pep_coords, pep_seq, mhc_coords, mhc_seq
+
+
 def normalize_coords(coords):
     """Normalize coordinates to [-1, 1]."""
     coords = np.array(coords)

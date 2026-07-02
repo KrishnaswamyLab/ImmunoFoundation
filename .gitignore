@@ -113,3 +113,4 @@ temp/
 data/*
 data_old/
 .claude/
+scripts/
